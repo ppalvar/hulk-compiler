@@ -101,7 +101,6 @@ class SemanticChecker:
     def identifier(self, ast, symbols):
         result = symbols.is_defined(ast[1])
         if not result:
-            print(symbols.symbols)
             self.errors.append(f'Variable {ast[1]} used but not defined')
         return result
     
@@ -125,17 +124,75 @@ class SemanticChecker:
         return result
     
     def assignment(self, ast, symbols):
-        result = symbols.is_defined(ast[1]) and self.check(ast[2], symbols)
-        tp = symbols.deduce_type(ast[2])
-
-        if symbols.get_type(ast[1]) != tp:
-            self.errors.append(f'Cannot assign type {tp} to variable {ast[1]} of type {symbols.get_type(ast[1])}')
-            result = False
+        _, lvalue, rvalue = ast
         
-        return result and tp
+        result0 = self.check(lvalue, symbols) if type(lvalue) != str else symbols.is_defined(lvalue)
+        tp_left = symbols.deduce_type(lvalue) if type(lvalue) != str else symbols.get_type(lvalue)
+
+        if not result0:
+            if type(lvalue) == str:
+                self.errors.append(f'Variable {lvalue} used but never declared')
+            elif lvalue[0] == 'array_access':
+                self.errors.append(f'Variable {lvalue[1]} used but never declared')
+            else:
+                self.errors.append('Fatal Error: unassigned variable')
+            
+            return False
+
+        result1 = self.check(rvalue, symbols)
+        tp_right = symbols.deduce_type(rvalue)
+
+        if tp_left != tp_right:
+            self.errors.append(f'Cannot convert type <{tp_right}> to <{tp_left}>')
+        
+        return result0 and result1 and tp_left == tp_right and tp_right != None
     
     def compound_instruction(self, ast, symbols):
         return self.check(ast[1], symbols)
+    
+    def array_declaration_explicit(self, ast, symbols):
+        _, items = ast
+
+        types = []
+        result = True
+        for item in items:
+            tp = symbols.deduce_type(item)
+            types.append(tp)
+
+            result = result and self.check(item, symbols)
+
+            if not result or not tp:
+                break
+        
+
+        type_matches = all(x == types[0] and x != None for x in types)
+        return type_matches and result
+    
+    def array_access(self, ast, symbols):
+        _, name, index = ast
+
+        index_tp = symbols.deduce_type(index)
+
+        result = True
+
+        if index_tp != 'number':
+            self.errors.append('Can only index array using a number')
+            result = False
+        
+        if not symbols.is_defined(name):
+            self.errors.append(f'Variable {name} used but not defined')
+            result = False
+        
+        return result
+
+
+class Symbol:
+        def __init__(self, type:str, alias: int, return_type: str = None, param_types: list[str] = None) -> None:
+            self.type = type
+            self.alias = alias
+            self.return_type = return_type
+            self.param_types = param_types
+
 
 class SymbolTable:
     def __init__(self) -> None:
@@ -144,23 +201,33 @@ class SymbolTable:
     def make_child(self):
         return copy.deepcopy(self)
     
-    def define(self, name: str, type: str, alias: int=None):
+    def define(self, name: str, type: str, alias: int=None, return_type: str = None, param_types: list[str] = None):
         if alias == None:
             alias = len(self.symbols)
-        self.symbols[name] = (type, alias, True)
-    
-    def undefine(self, name: str):
-        if self.is_defined(name):
-            raise NameError(f"{name} is not defined")
-        self.symbols[name][2] = False
+        self.symbols[name] = Symbol(type, alias, return_type, param_types)
     
     def is_defined(self, name: str):
-        return name in self.symbols and self.symbols[name][2]
+        return name in self.symbols
 
     def get_type(self, name: str):
-        if not self.symbols[name]:
-            raise NameError(f"{name} is not defined")
-        return self.symbols[name][0]
+        if name not in self.symbols:
+            return None
+        return self.symbols[name].type
+    
+    def get_return_type(self, name: str):
+        if name not in self.symbols:
+            return None
+        return self.symbols[name].return_type
+    
+    def get_params_type(self, name: str):
+        if name not in self.symbols:
+            return None
+        return self.symbols[name].param_types
+
+    def get_symbol(self, name: str) -> Symbol|None:
+        if name not in self.symbols:
+            return None
+        return self.symbols[name]
 
     def deduce_type(self, ast):
         try:
@@ -179,6 +246,7 @@ class SymbolTable:
     def deduce_type_binop(self, ast):
         t1 = self.deduce_type(ast[2])
         t2 = self.deduce_type(ast[3])
+        print(ast[1], t1, t2)
         if t1 != t2:
             return None
         elif ast[1] in ('==', '<=', '>=', '>', '<', '!=') and t1 == 'number':
@@ -206,3 +274,32 @@ class SymbolTable:
     
     def deduce_type_grouped(self, ast):
         return self.deduce_type(ast[1])
+    
+    def deduce_type_array_declaration_explicit(self, ast):
+        _, items = ast
+
+        types = []
+        for item in items:
+            tp = self.deduce_type(item)
+            
+            if not tp:
+                return None
+            
+            types.append(tp)
+
+        type_matches = all(x == types[0] and x != None for x in types)
+
+        if type_matches:
+            return f'array:{types[0]}:{len(items)}'
+            # return types[0]
+        return None
+    
+    def deduce_type_array_access(self, ast):
+        _, name, _ = ast
+
+        _tp = self.get_type(name)
+
+        tp = _tp.split(':')[1:-1]
+        tp = ':'.join(tp)
+
+        return tp

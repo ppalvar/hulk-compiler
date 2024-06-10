@@ -54,10 +54,10 @@ t_EQUAL = r'='
 t_SEMICOLON = r';'
 t_CONCAT = r'\@'
 t_COMMA = r'\,'
-t_LBRACKET = '\['
-t_RBRACKET = '\]'
-t_LCURLYBRACE = '\{'
-t_RCURLYBRACE = '\}'
+t_LBRACKET = r'\['
+t_RBRACKET = r'\]'
+t_LCURLYBRACE = r'\{'
+t_RCURLYBRACE = r'\}'
 
 t_IF = r'if'
 t_ELIF = r'elif'
@@ -70,8 +70,8 @@ t_LET = r'let'
 t_STRING = r'\".*?\"'
 
 def t_NUMBER(t):
-    r'\d+'
-    t.value = int(t.value)
+    r'[+-]?([0-9]*[.])?[0-9]+'
+    t.value = float(t.value)
     return t
 
 def t_TRUE(t):

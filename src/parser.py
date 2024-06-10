@@ -59,6 +59,7 @@ def p_declaration_list(p):
 def p_declaration(p):
     """
     declaration : IDENTIFIER EQUAL dynamic_expression
+                | IDENTIFIER EQUAL array_declaration
     """
     p[0] = ('declaration', p[1], p[3])
 
@@ -143,9 +144,17 @@ def p_instruction_list(p):
 
 def p_assignment(p):
     """
-    assignment : IDENTIFIER ASSIGN dynamic_expression SEMICOLON
+    assignment : lvalue ASSIGN dynamic_expression SEMICOLON
     """
     p[0] = ('assignment', p[1], p[3])
+
+
+def p_lvalue(p):
+    """
+    lvalue : IDENTIFIER
+           | array_access
+    """
+    p[0] = p[1]
 
 
 def p_executable_expression(p):
@@ -246,6 +255,8 @@ def p_arithmetic_factor(p):
         tp = p.slice[1].type.lower()
         if tp in ('true', 'false'):
             p[0] = ('bool', p[1])
+        elif tp == 'array_access':
+            p[0] = p[1]
         else:
             p[0] = (tp, p[1])
     elif len(p) == 3:
@@ -253,7 +264,39 @@ def p_arithmetic_factor(p):
     elif len(p) == 4:
         p[0] = ('grouped', p[2])
 
+def p_array_access(p):
+    """
+    array_access : IDENTIFIER LBRACKET dynamic_expression RBRACKET
+    """
+    p[0] = ('array_access', p[1], p[3])
 
+
+def p_array_declaration(p):
+    """
+    array_declaration : explicit_array_declaration
+    """
+
+    p[0] = p[1]
+
+def p_explicit_array_declaration(p):
+    """
+    explicit_array_declaration : LBRACKET expression_list RBRACKET 
+    """
+    p[0] = ('array_declaration_explicit', p[2])
+
+
+def p_expression_list(p):
+    """
+    expression_list : expression_list COMMA dynamic_expression
+                    | dynamic_expression
+    """
+    if len(p) == 2 and p[1]:
+        p[0] = [p[1]]
+    elif len(p) == 4:
+        p[0] = p[1]
+        if p[3]:
+            p[0].append(p[3])
+    
 
 def p_error(p):
     print(f'Syntax error at {p.value!r}')
