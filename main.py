@@ -5,11 +5,18 @@ from src.tac_generator import TacGenerator
 def main(data):
     ast = parser.parse(data)
 
+    if not ast:
+        print('Error while parsing')
+
     semantic_checker = SemanticChecker()
 
     if not semantic_checker.check(ast):
-        print("Semantic error")
+        print("Semantic errors")
+        for error in semantic_checker.errors:
+            print(error)
         return
+    else:
+        print("No semantic errors")
 
     tac_generator = TacGenerator()
 
@@ -18,7 +25,9 @@ def main(data):
     print(tac_generator)
 
 
-data = "1 + (1 - -1) > 10 || 1 < 2 && !false"
+filename = 'examples/simple.hulk'
+with open(filename, 'r') as file:
+    data = file.read()
 
 if __name__ == '__main__':
     main(data)

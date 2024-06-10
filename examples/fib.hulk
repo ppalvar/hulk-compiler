@@ -1,0 +1,10 @@
+let a = 1, b = 1, n = 10 in {
+    while (n != 0) {
+        let c = a + b;
+        b := a;
+        a := c;
+        n := n - 1;
+    }
+    
+    print(a);
+}

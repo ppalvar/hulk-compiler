@@ -1,95 +1,259 @@
 from src.lexer import *
-
 from ply.yacc import yacc, YaccProduction
 
-# def p_program(p):
-#     """
-#     program : statement_list
-#     """
 
-#     p[0] = p[1]
-
-# def p_statement_list(p):
-#     """
-#     statement_list : statement SEMICOLON
-#     """
-
-def p_expression(p):
+def p_program(p):
     """
-    expression : arithmetic_expression
-               | boolean_expression
+    program : program statement 
+              | statement
     """
+    if len(p) == 2 and p[1]:
+        p[0] = [p[1]]
+    elif len(p) == 3:
+        p[0] = p[1]
+        if p[2]:
+            p[0].append(p[2])
 
+
+def p_statement(p):
+    """
+    statement : instruction 
+    """
     p[0] = p[1]
+    #             function |
+    #             type
+
+
+def p_instruction(p):
+    """
+    instruction : var_declaration 
+                  | while_loop 
+                  | conditional 
+                  | compound_instruction 
+                  | executable_expression
+                  | assignment 
+    """
+    p[0] = p[1]
+
+
+def p_var_declaration(p):
+    """
+    var_declaration : LET declaration_list IN instruction
+    """
+    p[0] = ['var_inst', p[2], p[4], None] # last pos is for symbol table
+
+
+def p_declaration_list(p):
+    """
+    declaration_list : declaration_list COMMA declaration 
+                       | declaration
+    """
+    if len(p) == 2 and p[1]:
+        p[0] = [p[1]]
+    elif len(p) == 4:
+        p[0] = p[1]
+        if p[3]:
+            p[0].append(p[3])
+
+
+def p_declaration(p):
+    """
+    declaration : IDENTIFIER EQUAL dynamic_expression
+    """
+    p[0] = ('declaration', p[1], p[3])
+
+
+def p_while_loop(p):
+    """
+    while_loop : WHILE LPAREN dynamic_expression RPAREN instruction
+    """
+    p[0] = ('while_loop', p[3], p[5])
+
+
+def p_conditional(p):
+    """
+    conditional :   if_statement elif_statement_list else_statement 
+                    | if_statement elif_statement_list
+                    | if_statement else_statement
+                    | if_statement
+    """
+    if len(p) == 2:
+        p[0] = ('conditional', p[1], None, None)
+    elif len(p) == 3:
+        if p[2][0] == 'else_statement':
+            p[0] = ('conditional', p[1], None, p[2])    
+        else:
+            p[0] = ('conditional', p[1], p[2], None)
+    elif len(p) == 4:
+        p[0] = ('conditional', p[1], p[2], p[3])
+
+
+def p_if_statement(p):
+    """
+    if_statement : IF LPAREN dynamic_expression RPAREN instruction
+    """
+    p[0] = ('if_statement', p[3], p[5])
+
+def p_elif_statement_list(p):
+    """
+    elif_statement_list :   elif_statement_list elif_statement
+                            | elif_statement
+    """
+    if len(p) == 2 and p[1]:
+        p[0] = [p[1]]
+    elif len(p) == 3:
+        p[0] = p[1]
+        if p[2]:
+            p[0].append(p[2])
+
+
+def p_elif_statement(p):
+    """
+    elif_statement : ELIF LPAREN dynamic_expression RPAREN instruction
+    """
+    p[0] = ('elif_statement', p[3], p[5])
+
+
+def p_else_statement(p):
+    """
+    else_statement : ELSE instruction
+    """
+    p[0] = ('else_statement', p[2])
+
+
+def p_compound_instruction(p):
+    """
+    compound_instruction : LCURLYBRACE instruction_list RCURLYBRACE
+    """
+    p[0] = ('compound_instruction', p[2])
+
+
+def p_instruction_list(p):
+    """
+    instruction_list :  instruction_list instruction
+                        | instruction
+    """
+    if len(p) == 2:
+        p[0] = [p[1]]
+    elif len(p) == 3:
+        p[0] = p[1]
+        if p[2]:
+            p[0].append(p[2])
+        
+
+def p_assignment(p):
+    """
+    assignment : IDENTIFIER ASSIGN dynamic_expression SEMICOLON
+    """
+    p[0] = ('assignment', p[1], p[3])
+
+
+def p_executable_expression(p):
+    """
+    executable_expression : dynamic_expression SEMICOLON
+    """
+    p[0] = p[1]
+
+
+def p_dynamic_expression(p):
+    """
+    dynamic_expression :  dynamic_expression CONCAT bool_expression
+                        | bool_expression
+    """
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 4:
+        p[0] = ('str_concat', p[1], p[3])
+
+
+def p_bool_expression(p):
+    """
+    bool_expression : bool_expression AND bool_term
+                    | bool_expression OR bool_term
+                    | bool_term
+    """
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 4:
+        p[0] = ('binop', p[2], p[1], p[3])
+
+
+def p_bool_term(p):
+    """
+    bool_term :   bool_term LESSEQUAL bool_factor
+                | bool_term GREATEQUAL bool_factor
+                | bool_term EQUEQUAL bool_factor
+                | bool_term DISTINCT bool_factor
+                | bool_term LESS bool_factor
+                | bool_term GREAT bool_factor
+                | bool_factor
+    """
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 4:
+        p[0] = ('binop', p[2], p[1], p[3])
+
+
+def p_bool_factor(p):
+    """
+    bool_factor : NOT bool_factor
+                | arithmetic_expression
+    """
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 3:
+        p[0] = ('unary', p[1], p[2])
+
 
 def p_arithmetic_expression(p):
     """
-    arithmetic_expression : arithmetic_expression PLUS arithmetic_term
-               | arithmetic_expression MINUS arithmetic_term
-               | arithmetic_term
+    arithmetic_expression :   arithmetic_expression PLUS arithmetic_term
+                            | arithmetic_expression MINUS arithmetic_term
+                            | arithmetic_term
     """
-    if len(p) == 4:
-        p[0] = ('binop', p[2], p[1], p[3], p.slice[2].lineno, p.slice[2].lexpos)
-    elif len(p) == 2:
+    
+    if len(p) == 2:
         p[0] = p[1]
+    elif len(p) == 4:
+        p[0] = ('binop', p[2], p[1], p[3])
+
 
 def p_arithmetic_term(p):
     """
-    arithmetic_term : arithmetic_term MULTIPLY arithmetic_factor
-         | arithmetic_term DIVIDE arithmetic_factor
-         | arithmetic_factor
+    arithmetic_term : arithmetic_term TIMES arithmetic_factor
+                    | arithmetic_term DIV arithmetic_factor
+                    | arithmetic_factor
     """
-
-    if len(p) == 4:
-        p[0] = ('binop', p[2], p[1], p[3], p.slice[2].lineno, p.slice[2].lexpos)
-    elif len(p) == 2:
+    if len(p) == 2:
         p[0] = p[1]
+    elif len(p) == 4:
+        p[0] = ('binop', p[2], p[1], p[3])
+
 
 def p_arithmetic_factor(p):
     """
-    arithmetic_factor : NUMBER
-           | PLUS arithmetic_factor
-           | MINUS arithmetic_factor
-           | LPAREN arithmetic_expression RPAREN
+    arithmetic_factor :   NUMBER 
+                        | IDENTIFIER 
+                        | STRING 
+                        | TRUE
+                        | FALSE
+                        | array_access
+                        | PLUS arithmetic_factor 
+                        | MINUS arithmetic_factor 
+                        | LPAREN bool_expression RPAREN 
     """
-
     if len(p) == 2:
-        p[0] = ('number', p[1])
+        tp = p.slice[1].type.lower()
+        if tp in ('true', 'false'):
+            p[0] = ('bool', p[1])
+        else:
+            p[0] = (tp, p[1])
     elif len(p) == 3:
         p[0] = ('unary', p[1], p[2])
     elif len(p) == 4:
         p[0] = ('grouped', p[2])
 
-def p_boolean_expression(p):
-    """
-    boolean_expression : boolean_expression AND boolean_term
-                       | boolean_expression OR boolean_term
-                       | boolean_term
-    """
-    if len(p) == 4:
-        p[0] = ('binop', p[2], p[1], p[3], p.slice[2].lineno, p.slice[2].lexpos)
-    elif len(p) == 2:
-        p[0] = p[1]
 
-def p_boolean_term(p):
-    """
-    boolean_term : arithmetic_expression LESSEQUAL arithmetic_expression
-                | arithmetic_expression GREATEQUAL arithmetic_expression
-                | arithmetic_expression EQUAL arithmetic_expression
-                | arithmetic_expression DISTINCT arithmetic_expression
-                | arithmetic_expression LESS arithmetic_expression
-                | arithmetic_expression GREAT arithmetic_expression
-                | NOT boolean_expression
-                | TRUE
-                | FALSE
-    """
-
-    if len(p) == 4:
-        p[0] = ('binop', p[2], p[1], p[3], p.slice[2].lineno, p.slice[2].lexpos)
-    elif len(p) == 3:
-        p[0] = ('unary', p[1], p[2])
-    elif len(p) == 2:
-        p[0] = ('bool', p[1])
 
 def p_error(p):
     print(f'Syntax error at {p.value!r}')
