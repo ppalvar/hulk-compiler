@@ -18,14 +18,13 @@ class TacGenerator:
                     self.generate(inst)
                 return None
             method = self.__getattribute__(ast[0])
-            self.var_count += 1
             result = method(ast, symb_table)
             return result
         except:
             raise
     
     def binop(self, ast, symb_table):
-        t0 = f't0{self.var_count}'
+        t0 = self.get_next_var()
         t1 = self.generate(ast[2], symb_table)
         t2 = self.generate(ast[3], symb_table)
 
@@ -34,21 +33,28 @@ class TacGenerator:
         return t0
     
     def number(self, ast, symb_table):
-        t0 = f't0{self.var_count}'
+        t0 = self.get_next_var()
         
         self.create_assign(t0, ast[1])
 
         return t0
 
     def bool(self, ast, symb_table):
-        t0 = f't0{self.var_count}'
+        t0 = self.get_next_var()
+        
+        self.create_assign(t0, ast[1])
+
+        return t0
+    
+    def string(self, ast, symb_table):
+        t0 = self.get_next_var()
         
         self.create_assign(t0, ast[1])
 
         return t0
     
     def unary(self, ast, symb_table):
-        t0 = f't0{self.var_count}'
+        t0 = self.get_next_var()
         t1 = self.generate(ast[2], symb_table)
         
         self.create_unary(t0, ast[1], t1)
@@ -67,18 +73,23 @@ class TacGenerator:
         self.generate(body, symbols)
     
     def declaration(self, ast, symb_table):
-        _, name, value = ast
-
+        _, annotated_name, value = ast
+        _, name, annotated_type = annotated_name
         tp : str = symb_table.get_type(name)
         
         if tp.startswith('array'):
             self.create_array_alloc(name, tp, int(tp.split(':')[-1]))
 
-            _, items = value
-            for i, item in enumerate(items):
-                t0 = self.generate(item, symb_table)
-                
-                self.create_array_set(name, i, t0)
+            source, _value = value
+            if source == 'array_declaration_explicit':
+                for i, item in enumerate(_value):
+                    t0 = self.generate(item, symb_table)
+                    
+                    self.create_array_set(name, i, t0)
+            elif source == 'identifier':
+                t0 = self.generate(value, symb_table)
+                self.create_assign(name, t0)
+
         else:
             t0 = self.generate(value, symb_table)
             self.create_assign(name, t0)
@@ -87,7 +98,10 @@ class TacGenerator:
 
 
     def identifier(self, ast, symb_table):
-        return ast[1]
+        _, name = ast
+        t0 = self.get_next_var()
+        self.create_assign(t0, name)
+        return t0
     
     def while_loop(self, ast, symb_table):
         _, cond, body = ast
@@ -175,12 +189,29 @@ class TacGenerator:
     def array_access(self, ast, symb_table):
         _, name, index = ast
 
-        t0 = f't0{self.var_count}'
+        t0 = self.get_next_var()
         t1 = self.generate(index, symb_table)
 
         self.create_array_get(t0, t1, name)
 
         return t0
+    
+    def function_call(self, ast, symb_table):
+        _, name, params = ast
+
+        for param in params:
+            t0 = self.generate(param, symb_table)
+
+            self.create_set_param(t0)
+        
+        t1 = self.get_next_var()
+
+        self.create_func_call(t1, name)
+        return t1
+        
+    def get_next_var(self) -> str:
+        self.var_count += 1
+        return f't0{self.var_count}'
 
     #region code generation helpers
     def create_binop(self, t1, op, t2, t3):
@@ -209,4 +240,10 @@ class TacGenerator:
     
     def create_array_set(self, t1, index, t2):
         self.code.append(('set_index', t1, index, t2))
+    
+    def create_set_param(self, value):
+        self.code.append(('set_param', value))
+    
+    def create_func_call(self, t0, name):
+        self.code.append(('call', t0, name))
     #endregion

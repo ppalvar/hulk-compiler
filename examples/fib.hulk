@@ -1,10 +1,9 @@
-let a = 1, b = 1, n = 10 in {
+let a = 1, b = 1, n = 10, c = 0 in {
     while (n != 0) {
-        let c = a + b;
+        c := a + b;
         b := a;
         a := c;
         n := n - 1;
     }
-    
     print(a);
 }

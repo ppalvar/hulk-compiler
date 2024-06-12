@@ -18,6 +18,7 @@ def p_program(p):
 def p_statement(p):
     """
     statement : instruction 
+              | function_declaration
     """
     p[0] = p[1]
     #             function |
@@ -58,8 +59,8 @@ def p_declaration_list(p):
 
 def p_declaration(p):
     """
-    declaration : IDENTIFIER EQUAL dynamic_expression
-                | IDENTIFIER EQUAL array_declaration
+    declaration : annotated_identifier EQUAL dynamic_expression
+                | annotated_identifier EQUAL array_declaration
     """
     p[0] = ('declaration', p[1], p[3])
 
@@ -247,6 +248,7 @@ def p_arithmetic_factor(p):
                         | TRUE
                         | FALSE
                         | array_access
+                        | function_call
                         | PLUS arithmetic_factor 
                         | MINUS arithmetic_factor 
                         | LPAREN bool_expression RPAREN 
@@ -255,7 +257,7 @@ def p_arithmetic_factor(p):
         tp = p.slice[1].type.lower()
         if tp in ('true', 'false'):
             p[0] = ('bool', p[1])
-        elif tp == 'array_access':
+        elif tp in ('array_access', 'function_call'):
             p[0] = p[1]
         else:
             p[0] = (tp, p[1])
@@ -296,7 +298,67 @@ def p_expression_list(p):
         p[0] = p[1]
         if p[3]:
             p[0].append(p[3])
-    
+
+
+def p_function_call(p):
+    """
+    function_call : IDENTIFIER LPAREN expression_list RPAREN
+    """
+    p[0] = ('function_call', p[1], p[3])
+
+
+def p_function_declaration(p):
+    """
+    function_declaration : FUNCTION IDENTIFIER LPAREN param_list RPAREN function_body
+                         | FUNCTION IDENTIFIER LPAREN param_list RPAREN type_annotation function_body
+    """
+    if len(p) == 7:
+        print(p[5])
+        p[0] = ('function', None, p[2], p[4], p[6])
+    elif len(p) == 8:
+        p[0] = ('function', p[6], p[2], p[4], p[7])
+
+
+def p_function_body(p):
+    """
+    function_body : RIGHTARROW instruction
+                  | compound_instruction
+    """
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 3:
+        p[0] = p[2]
+
+def p_param_list(p):
+    """
+    param_list : param_list COMMA annotated_identifier
+               | annotated_identifier
+    """
+    if len(p) == 2 and p[1]:
+        p[0] = [p[1]]
+    elif len(p) == 4:
+        p[0] = p[1]
+        if p[3]:
+            p[0].append(p[3])
+
+
+def p_annotated_identifier(p):
+    """
+    annotated_identifier : IDENTIFIER type_annotation
+                         | IDENTIFIER 
+    """
+    if len(p) == 2:
+        p[0] = ('annotated_identifier', p[1], None)
+    elif len(p) == 3:
+        p[0] = ('annotated_identifier', p[1], p[2])
+
+
+def p_type_annotation(p):
+    """
+    type_annotation : COLON IDENTIFIER
+    """
+    p[0] = p[2]
+
 
 def p_error(p):
     print(f'Syntax error at {p.value!r}')

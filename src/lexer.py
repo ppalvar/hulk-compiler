@@ -1,6 +1,7 @@
 from ply.lex import lex, Lexer
 
-keywords = ('TRUE', 'FALSE', 'IF', 'ELIF', 'ELSE', 'WHILE', 'FOR', 'IN', 'LET')
+keywords = ('TRUE', 'FALSE', 'IF', 'ELIF', 'ELSE', 'WHILE',
+            'FOR', 'IN', 'LET', 'FUNCTION')
 
 tokens = ( 'PLUS', 
            'MINUS', 
@@ -20,6 +21,7 @@ tokens = ( 'PLUS',
            'OR',
            'NOT',
            'SEMICOLON',
+           'COLON',
            'LBRACKET',
            'RBRACKET',
            'IDENTIFIER',
@@ -28,7 +30,8 @@ tokens = ( 'PLUS',
            'EQUAL',
            'STRING',
            'LCURLYBRACE',
-           'RCURLYBRACE') + keywords
+           'RCURLYBRACE',
+           'RIGHTARROW') + keywords
 
 t_ignore = ' \t'
 
@@ -39,6 +42,7 @@ t_DIV = r'/'
 t_LPAREN = r'\('
 t_RPAREN = r'\)'
 
+t_RIGHTARROW = r'=>'
 t_LESSEQUAL = r'<='
 t_GREATEQUAL = r'>='
 t_EQUEQUAL = r'=='
@@ -52,6 +56,7 @@ t_ASSIGN = r':='
 t_EQUAL = r'='
 
 t_SEMICOLON = r';'
+t_COLON = r'\:'
 t_CONCAT = r'\@'
 t_COMMA = r'\,'
 t_LBRACKET = r'\['
@@ -66,6 +71,7 @@ t_WHILE = r'while'
 t_FOR = r'for'
 t_IN = r'in'
 t_LET = r'let'
+t_FUNCTION = r'function'
 
 t_STRING = r'\".*?\"'
 

@@ -1,5 +1,53 @@
 import copy
 
+
+TYPE_NUMBER = 'number'
+TYPE_STRING = 'string'
+TYPE_BOOL   = 'bool'
+TYPE_OBJECT = 'object'
+TYPE_CLASS  = 'class'
+TYPE_FUNCTION = 'function'
+
+# TODO: change the default conversions
+ALLOWED_CONVERTIONS = {
+    TYPE_NUMBER : (TYPE_NUMBER, TYPE_STRING, TYPE_OBJECT),
+    TYPE_STRING : (TYPE_STRING, TYPE_OBJECT),
+    TYPE_BOOL : (TYPE_BOOL, TYPE_STRING, TYPE_OBJECT),
+    TYPE_OBJECT : (TYPE_OBJECT, TYPE_STRING, TYPE_OBJECT),
+    TYPE_CLASS : (TYPE_CLASS, TYPE_STRING, TYPE_OBJECT),
+    TYPE_FUNCTION : (TYPE_FUNCTION, TYPE_STRING, TYPE_OBJECT),
+}
+
+
+class Symbol:
+        def __init__(self, type:str, alias: int, return_type: str = None, param_types: tuple[str] = None) -> None:
+            self.type = type
+            self.alias = alias
+            self.return_type = return_type
+            self.param_types = param_types
+
+
+BUILTIN_FUNCTIONS = {
+    'print' : Symbol(TYPE_FUNCTION, 0, TYPE_STRING, (TYPE_OBJECT,))
+}
+
+
+class SymbolType:
+    def __init__(self, annotation: str, type: str, is_error: bool = False) -> None:
+        self.annotation = annotation
+        self.type = type
+        self.is_error = is_error
+
+TYPES = (
+    SymbolType('String', TYPE_STRING),
+    SymbolType('Bool', TYPE_BOOL),
+    SymbolType('Number', TYPE_NUMBER),
+    SymbolType('None', 'none', True),
+    SymbolType('NoDeduced', 'no_deduced', False)
+)
+
+ANNOTATIONS = {tp.annotation : tp.type for tp in TYPES}
+
 class SemanticChecker:
     def __init__(self) -> None:
         self.errors = []
@@ -28,21 +76,35 @@ class SemanticChecker:
         result = True
         _symbols = symbols.make_child()
         
-        for _, name, value in declarations:
-            result = result and self.check(value, _symbols)
-            tp = _symbols.deduce_type(value)
+        for decl in declarations:
+            tmp = self.check(decl, _symbols)
+            result = tmp and result
 
-            if tp is None:
-                self.errors.append(f'Cannot deduce type for variable \'{name}\'')
-
-            _symbols.define(name, tp)
-        
         ast[3] = _symbols
         result = result and self.check(body, _symbols)
         return result
 
     def declaration(self, ast, symbols):
-        pass
+        _, annotated_name, value = ast
+
+        name, a_type = SymbolTable.resolve_annotation(annotated_name)
+        
+        tp = symbols.deduce_type(value)
+        result = self.check(value, symbols)
+
+        if tp is None:
+            self.errors.append(f'Cannot deduce type for variable <{name}>')
+            result = False
+        
+        if a_type != None and a_type != tp:
+            self.errors.append(f'Type annotation <{a_type}> for <{name}> doesn\'t matches expression of type <{tp}>')
+            result = False
+        
+        if result:
+            symbols.define(name, tp)
+
+        return result
+
 
     def while_loop(self, ast, symbols):
         _, condition, body = ast
@@ -175,23 +237,44 @@ class SemanticChecker:
 
         result = True
 
-        if index_tp != 'number':
-            self.errors.append('Can only index array using a number')
-            result = False
-        
         if not symbols.is_defined(name):
             self.errors.append(f'Variable {name} used but not defined')
             result = False
         
+        if result:
+            tp = symbols.get_type(name)
+            if not tp.startswith('array'):
+                self.errors.append(f'Object of type <{tp}> cannot be indexed')
+                result = False
+
+        if index_tp != 'number':
+            self.errors.append('Can only index array using a number')
+            result = False
+
         return result
+    
+    def function_call(self, ast, symbols):
+        _, func, params = ast
+        
+        result = symbols.is_defined(func)
 
+        if not result:
+            self.errors.append(f'Function <{func}> not defined')
+            return False
 
-class Symbol:
-        def __init__(self, type:str, alias: int, return_type: str = None, param_types: list[str] = None) -> None:
-            self.type = type
-            self.alias = alias
-            self.return_type = return_type
-            self.param_types = param_types
+        param_types = symbols.get_params_type(func)
+        for i, param in enumerate(params):
+            tp = symbols.deduce_type(param)
+            
+            if not symbols.can_convert(tp, param_types[i]):
+                self.errors.append(F'Cannot convert parameter from <{tp}> to <{param_types[i]}>')
+                return False
+        
+        return True
+        
+    
+    def function(self, ast, symbols):
+        symbols.try_deduce_function_types(ast)
 
 
 class SymbolTable:
@@ -207,28 +290,72 @@ class SymbolTable:
         self.symbols[name] = Symbol(type, alias, return_type, param_types)
     
     def is_defined(self, name: str):
-        return name in self.symbols
+        return name in self.symbols or name in BUILTIN_FUNCTIONS
 
-    def get_type(self, name: str):
-        if name not in self.symbols:
-            return None
-        return self.symbols[name].type
+    def get_type(self, name: str) -> str:
+        sym = self.get_symbol(name)
+        return sym.type if sym else None
     
-    def get_return_type(self, name: str):
-        if name not in self.symbols:
-            return None
-        return self.symbols[name].return_type
+    def get_return_type(self, name: str) -> str:
+        sym = self.get_symbol(name)
+        return sym.return_type if sym else None
     
-    def get_params_type(self, name: str):
-        if name not in self.symbols:
-            return None
-        return self.symbols[name].param_types
+    def get_params_type(self, name: str) -> tuple[str]:
+        sym = self.get_symbol(name)
+        return sym.param_types if sym else None
 
     def get_symbol(self, name: str) -> Symbol|None:
         if name not in self.symbols:
-            return None
+            if name not in BUILTIN_FUNCTIONS:
+                return None
+            return BUILTIN_FUNCTIONS[name]
         return self.symbols[name]
 
+    def can_convert(self, type_a : str, type_b : str):
+        if type_a not in ALLOWED_CONVERTIONS:
+            return False
+        
+        return type_b in ALLOWED_CONVERTIONS[type_a]
+    
+    @classmethod
+    def resolve_annotation(cls, annotated_identifier) -> tuple[str, str] | str:
+        if annotated_identifier is None:
+            return None
+        elif type(annotated_identifier) == str:
+            annotation = annotated_identifier
+            name = None
+        else :
+            _, name, annotation = annotated_identifier
+
+        if annotation in ANNOTATIONS:
+            annotation = ANNOTATIONS[annotation]
+        
+        if not name:
+            return annotation
+        return name, annotation
+    
+    #region: type inference for function parameters and return type
+
+    def try_deduce_function_types(self, func):
+        _, return_type, name, params, body = func
+
+        return_type = SymbolTable.resolve_annotation(None)
+        print(return_type)
+
+        param_types = {}
+        for param in params:
+            param_name, param_type = SymbolTable.resolve_annotation(param)
+            param_types[param_name] = param_type
+        print(param_types)
+        if type(body) != list:
+            self.try_unify_types(params, body)
+    
+    def try_unify_types(self, varibles, instruction):
+        pass
+
+    #endregion
+
+    #region: type inference for expressions
     def deduce_type(self, ast):
         try:
             method = self.__getattribute__('deduce_type_' + ast[0])
@@ -246,7 +373,7 @@ class SymbolTable:
     def deduce_type_binop(self, ast):
         t1 = self.deduce_type(ast[2])
         t2 = self.deduce_type(ast[3])
-        print(ast[1], t1, t2)
+
         if t1 != t2:
             return None
         elif ast[1] in ('==', '<=', '>=', '>', '<', '!=') and t1 == 'number':
@@ -303,3 +430,4 @@ class SymbolTable:
         tp = ':'.join(tp)
 
         return tp
+    #endregion
