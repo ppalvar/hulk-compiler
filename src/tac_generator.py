@@ -1,4 +1,4 @@
-from src.semantic_checker import SymbolTable
+from src.semantic_checker import SymbolTable, SymbolType, Symbol
 
 class TacGenerator:
     def __init__(self) -> None:
@@ -9,7 +9,7 @@ class TacGenerator:
         _code = [repr(t0) for t0 in self.code]
         return '\n'.join(_code)
 
-    def generate(self, ast, symb_table=None) -> list[str]:
+    def generate(self, ast, symb_table: SymbolTable=None) -> list[str]:
         if symb_table == None:
             symb_table = SymbolTable()
         try:
@@ -23,7 +23,7 @@ class TacGenerator:
         except:
             raise
     
-    def binop(self, ast, symb_table):
+    def binop(self, ast, symb_table: SymbolTable):
         t0 = self.get_next_var()
         t1 = self.generate(ast[2], symb_table)
         t2 = self.generate(ast[3], symb_table)
@@ -32,28 +32,28 @@ class TacGenerator:
         
         return t0
     
-    def number(self, ast, symb_table):
+    def number(self, ast, symb_table: SymbolTable):
         t0 = self.get_next_var()
         
         self.create_assign(t0, ast[1])
 
         return t0
 
-    def bool(self, ast, symb_table):
-        t0 = self.get_next_var()
-        
-        self.create_assign(t0, ast[1])
-
-        return t0
-    
-    def string(self, ast, symb_table):
+    def bool(self, ast, symb_table: SymbolTable):
         t0 = self.get_next_var()
         
         self.create_assign(t0, ast[1])
 
         return t0
     
-    def unary(self, ast, symb_table):
+    def string(self, ast, symb_table: SymbolTable):
+        t0 = self.get_next_var()
+        
+        self.create_assign(t0, ast[1])
+
+        return t0
+    
+    def unary(self, ast, symb_table: SymbolTable):
         t0 = self.get_next_var()
         t1 = self.generate(ast[2], symb_table)
         
@@ -61,10 +61,10 @@ class TacGenerator:
 
         return t0
     
-    def grouped(self, ast, symb_table):
+    def grouped(self, ast, symb_table: SymbolTable):
         return self.generate(ast[1], symb_table)
     
-    def var_inst(self, ast, symb_table):
+    def var_inst(self, ast, symb_table: SymbolTable):
         _, decls, body, symbols = ast
 
         for decl in decls:
@@ -72,13 +72,13 @@ class TacGenerator:
         
         self.generate(body, symbols)
     
-    def declaration(self, ast, symb_table):
+    def declaration(self, ast, symb_table: SymbolTable):
         _, annotated_name, value = ast
         _, name, annotated_type = annotated_name
-        tp : str = symb_table.get_type(name)
+        tp = symb_table.get_type(name)
         
-        if tp.startswith('array'):
-            self.create_array_alloc(name, tp, int(tp.split(':')[-1]))
+        if tp.is_array:
+            self.create_array_alloc(name, tp, tp.size)
 
             source, _value = value
             if source == 'array_declaration_explicit':
@@ -97,13 +97,13 @@ class TacGenerator:
         return name
 
 
-    def identifier(self, ast, symb_table):
+    def identifier(self, ast, symb_table: SymbolTable):
         _, name = ast
         t0 = self.get_next_var()
         self.create_assign(t0, name)
         return t0
     
-    def while_loop(self, ast, symb_table):
+    def while_loop(self, ast, symb_table: SymbolTable):
         _, cond, body = ast
 
         label = f'while_{self.var_count}'
@@ -121,7 +121,7 @@ class TacGenerator:
 
         return t2
 
-    def assignment(self, ast, symb_table):
+    def assignment(self, ast, symb_table: SymbolTable):
         _, var, value = ast
         
         t0 = self.generate(value, symb_table)
@@ -135,10 +135,10 @@ class TacGenerator:
         
         return var
 
-    def compound_instruction(self, ast, symb_table):
+    def compound_instruction(self, ast, symb_table: SymbolTable):
         return self.generate(ast[1], symb_table)
     
-    def conditional(self, ast, symb_table):
+    def conditional(self, ast, symb_table: SymbolTable):
         _, if_statement, elif_statements, else_statement = ast
 
         _, cond, body = if_statement
@@ -183,10 +183,10 @@ class TacGenerator:
 
         return t2
     
-    def array_declaration_explicit(self, ast, symb_table):
-        return ast[0]
+    def array_declaration_explicit(self, ast, symb_table: SymbolTable):
+        raise NotImplementedError('array_declaration_explicit')
     
-    def array_access(self, ast, symb_table):
+    def array_access(self, ast, symb_table: SymbolTable):
         _, name, index = ast
 
         t0 = self.get_next_var()
