@@ -27,14 +27,38 @@ def p_statement(p):
 
 def p_instruction(p):
     """
-    instruction : var_declaration 
+    instruction : var_declaration
+                  | return_instruction 
                   | while_loop 
                   | conditional 
                   | compound_instruction 
                   | executable_expression
-                  | assignment 
+                  | assignment
+                  | continue_statement
+                  | break_statement
     """
     p[0] = p[1]
+
+
+def p_return_instruction(p):
+    """
+    return_instruction : RETURN dynamic_expression SEMICOLON
+    """
+    p[0] = ('return_statement', p[2])
+
+
+def p_break_statement(p):
+    """
+    break_statement : BREAK SEMICOLON
+    """
+    p[0] = ('break_statement',)
+
+
+def p_continue_statement(p):
+    """
+    continue_statement : CONTINUE SEMICOLON
+    """
+    p[0] = ('continue_statement',)
 
 
 def p_var_declaration(p):
@@ -60,7 +84,6 @@ def p_declaration_list(p):
 def p_declaration(p):
     """
     declaration : annotated_identifier EQUAL dynamic_expression
-                | annotated_identifier EQUAL array_declaration
     """
     p[0] = ('declaration', p[1], p[3])
 
@@ -169,6 +192,7 @@ def p_dynamic_expression(p):
     """
     dynamic_expression :  dynamic_expression CONCAT bool_expression
                         | bool_expression
+                        | array_declaration
     """
     if len(p) == 2:
         p[0] = p[1]
@@ -220,8 +244,7 @@ def p_arithmetic_expression(p):
     arithmetic_expression :   arithmetic_expression PLUS arithmetic_term
                             | arithmetic_expression MINUS arithmetic_term
                             | arithmetic_term
-    """
-    
+    """    
     if len(p) == 2:
         p[0] = p[1]
     elif len(p) == 4:
@@ -265,6 +288,7 @@ def p_arithmetic_factor(p):
         p[0] = ('unary', p[1], p[2])
     elif len(p) == 4:
         p[0] = ('grouped', p[2])
+        
 
 def p_array_access(p):
     """
@@ -279,6 +303,7 @@ def p_array_declaration(p):
     """
 
     p[0] = p[1]
+
 
 def p_explicit_array_declaration(p):
     """
@@ -313,10 +338,9 @@ def p_function_declaration(p):
                          | FUNCTION IDENTIFIER LPAREN param_list RPAREN type_annotation function_body
     """
     if len(p) == 7:
-        print(p[5])
-        p[0] = ('function', None, p[2], p[4], p[6])
+        p[0] = ['function', None, p[2], p[4], p[6], None]
     elif len(p) == 8:
-        p[0] = ('function', p[6], p[2], p[4], p[7])
+        p[0] = ['function', p[6], p[2], p[4], p[7], None]
 
 
 def p_function_body(p):
@@ -361,7 +385,7 @@ def p_type_annotation(p):
 
 
 def p_error(p):
-    print(f'Syntax error at {p.value!r}')
+    print(f'Syntax error at {p.value!r} in line {p.lineno} col {p.lexpos}')
 
 # Build the parser
 parser = yacc()

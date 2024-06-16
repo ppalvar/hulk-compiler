@@ -1,9 +1,11 @@
+from queue import LifoQueue as stack
 from src.semantic_checker import SymbolTable, SymbolType, Symbol
 
 class TacGenerator:
     def __init__(self) -> None:
         self.var_count = 0
         self.code = []
+        self.loop_labels = stack()
 
     def __str__(self) -> str:
         _code = [repr(t0) for t0 in self.code]
@@ -108,16 +110,24 @@ class TacGenerator:
 
         label = f'while_{self.var_count}'
         end_label = f'end_while_{self.var_count}'
+        skip_label = f'skip_while_{self.var_count}'
+        
 
         self.create_jump_inc(end_label)
         self.create_label(label)
 
+        self.enter_loop(end_label, skip_label)
+
         t2 = self.generate(body, symb_table)
+
+        self.exit_loop()
 
         self.create_label(end_label)
         
         t1 = self.generate(cond, symb_table)
         self.create_jump_cond(t1, label)
+
+        self.create_label(skip_label)
 
         return t2
 
@@ -176,8 +186,9 @@ class TacGenerator:
                 self.create_jump_inc(end_conditional)
                 self.create_label(end_label)
         
-        _, body = else_statement
-        t2 = self.generate(body, symb_table)
+        if else_statement:
+            _, body = else_statement
+            t2 = self.generate(body, symb_table)
 
         self.create_label(end_conditional)
 
@@ -196,7 +207,7 @@ class TacGenerator:
 
         return t0
     
-    def function_call(self, ast, symb_table):
+    def function_call(self, ast, symb_table: SymbolTable):
         _, name, params = ast
 
         for param in params:
@@ -208,6 +219,39 @@ class TacGenerator:
 
         self.create_func_call(t1, name)
         return t1
+    
+    def break_statement(self, ast, symb_table: SymbolTable):
+        _, end_label = self.get_current_loop()
+
+        self.create_jump_inc(end_label)
+    
+    def continue_statement(self, ast, symb_table: SymbolTable):
+        start_label, _ = self.get_current_loop()
+
+        self.create_jump_inc(start_label)
+    
+    def function(self, ast, symb_table: SymbolTable):
+        _, _, name, params, body, symbols = ast
+
+        label = f'function_{name}'
+        self.create_label(label)
+
+        for _, param, _ in params:
+            self.create_get_param(param)
+        
+        t0 = self.generate(body, symbols)
+
+        self.create_return(t0)
+        return None
+    
+    def return_statement(self, ast, symb_table: SymbolTable):
+        _, value = ast
+
+        t0 = self.generate(value, symb_table)
+
+        self.create_return(t0)
+        return None
+ 
         
     def get_next_var(self) -> str:
         self.var_count += 1
@@ -244,6 +288,23 @@ class TacGenerator:
     def create_set_param(self, value):
         self.code.append(('set_param', value))
     
+    def create_get_param(self, name):
+        self.code.append(('get_param', name))
+    
     def create_func_call(self, t0, name):
         self.code.append(('call', t0, name))
+    
+    def create_return(self, t0):
+        self.code.append(('return', t0))
     #endregion
+        
+    def enter_loop(self, start_label, end_label) -> None:
+        self.loop_labels.put((start_label, end_label))
+    
+    def exit_loop(self) -> None:
+        self.loop_labels.get()
+    
+    def get_current_loop(self) -> tuple[str, str]:
+        start_label, end_label = self.loop_labels.get()
+        self.enter_loop(start_label, end_label)
+        return start_label, end_label

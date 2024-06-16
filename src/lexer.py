@@ -1,7 +1,7 @@
 from ply.lex import lex, Lexer
 
 keywords = ('TRUE', 'FALSE', 'IF', 'ELIF', 'ELSE', 'WHILE',
-            'FOR', 'IN', 'LET', 'FUNCTION')
+            'FOR', 'IN', 'LET', 'FUNCTION', 'RETURN', 'BREAK', 'CONTINUE')
 
 tokens = ( 'PLUS', 
            'MINUS', 
@@ -72,11 +72,14 @@ t_FOR = r'for'
 t_IN = r'in'
 t_LET = r'let'
 t_FUNCTION = r'function'
+t_RETURN = r'return'
+t_BREAK = r'break'
+t_CONTINUE = r'continue'
 
 t_STRING = r'\".*?\"'
 
 def t_NUMBER(t):
-    r'[+-]?([0-9]*[.])?[0-9]+'
+    r'([0-9]*[.])?[0-9]+'
     t.value = float(t.value)
     return t
 

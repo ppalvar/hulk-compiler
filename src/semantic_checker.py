@@ -1,6 +1,5 @@
 import copy
 
-
 class SymbolType:
     def __init__(self, annotation: str, type: str, is_error: bool = False) -> None:
         self.annotation = annotation
@@ -13,7 +12,20 @@ class SymbolType:
         return f'TYPE <{self.annotation}>'
     
     __repr__ = __str__
+
+    def __eq__(self, __value: object) -> bool:
+        return  self  and __value and\
+                self.annotation == __value.annotation  and\
+                self.type == __value.type and\
+                self.is_error == __value.is_error and\
+                self.is_array == __value.is_array 
     
+    def __ne__(self, __value: object) -> bool:
+        return not self == __value
+    
+    def __hash__(self):
+        return hash((self.annotation, self.type, self.is_error, self.is_array, self.size))
+
     @classmethod
     def make_array_type(cls, items_type, size: int):
         if type(items_type) != SymbolType:
@@ -39,8 +51,14 @@ class SymbolType:
     def resolve_from_annotation(cls, annotation):
         if annotation is None:
             return TYPE_NO_DEDUCED
+        if type(annotation) != str:
+            raise TypeError(f'Type for <{annotation}> must be \'str\'')
         if annotation in ANNOTATIONS:
             return ANNOTATIONS[annotation]
+        if annotation.startswith('Array_'):
+            new_annotation = annotation[6 :]
+            item_type = cls.resolve_from_annotation(new_annotation)
+            return cls.make_array_type(item_type, 0)
         return TYPE_NOT_FOUND
     
     @classmethod
@@ -57,16 +75,18 @@ class SymbolType:
 
 
 class Symbol:
-        def __init__(self, _type:str, alias: int, return_type: str = None, param_types: tuple[str] = None) -> None:
-            self.type = SymbolType.resolve_from_name(_type) if type(_type) is not SymbolType else _type
-            self.alias = alias
-            self.return_type = SymbolType.resolve_from_name(return_type) if type(return_type) is not SymbolType else return_type
-            self.param_types = [SymbolType.resolve_from_name(name) if type(name) is not SymbolType else name for name in param_types] if param_types else None
+    def __init__(self, _type:str, alias: int, return_type: str = None, param_types: tuple[str] = None) -> None:
+        self.type = SymbolType.resolve_from_name(_type) if type(_type) is not SymbolType else _type
+        self.alias = alias
+        self.return_type = SymbolType.resolve_from_name(return_type) if type(return_type) is not SymbolType else return_type
+        self.param_types = [SymbolType.resolve_from_name(name) if type(name) is not SymbolType else name for name in param_types] if param_types else None
 
 
 class SymbolTable:
     def __init__(self) -> None:
         self.symbols = dict()
+        self.inside_function = False
+        self.loops = []
 
     def make_child(self):
         return copy.deepcopy(self)
@@ -102,27 +122,46 @@ class SymbolTable:
                 return None
             return BUILTIN_FUNCTIONS[name]
         return self.symbols[name]
+    
+    def set_function(self) -> None:
+        self.inside_function = True
+    
+    def unset_function(self) -> None:
+        self.inside_function = False
+    
+    def add_loop(self) -> None:
+        self.loops.append(None)
+    
+    def remove_loop(self) -> None:
+        self.loops.pop(0)
+
+    def is_on_function(self) -> bool:
+        return self.inside_function
+
+    def is_on_loop(self) -> bool:
+        return 0 != len(self.loops)
 
 
 class TypeInferenceService:
     #region: type inference for function parameters and return type
 
-    # def try_deduce_function_types(self, func):
-    #     _, return_type, name, params, body = func
+    @classmethod
+    def try_deduce_function_types(cls, func):
+        _, return_type, _, params, _, _ = func
 
-    #     return_type = SymbolTable.resolve_annotation(None)
-    #     print(return_type)
+        return_type = SymbolType.resolve_from_annotation(return_type)
 
-    #     param_types = {}
-    #     for param in params:
-    #         param_name, param_type = SymbolTable.resolve_annotation(param)
-    #         param_types[param_name] = param_type
-    #     print(param_types)
-    #     if type(body) != list:
-    #         self.try_unify_types(params, body)
-    
-    # def try_unify_types(self, varibles, instruction):
-    #     pass
+        param_types = {}
+        for param in params:
+            _, param_name, annotation = param
+            param_type = SymbolType.resolve_from_annotation(annotation)
+            param_types[param_name] = param_type
+        
+        
+        if FORCE_TYPE_ANNOTATIONS:
+            return return_type, param_types
+
+        raise NotImplementedError('Implement type inference for func parameters')
 
     #endregion
 
@@ -214,6 +253,15 @@ class TypeInferenceService:
         tp = SymbolType.get_array_item_type(_tp)
 
         return tp
+    
+    @classmethod
+    def deduce_type_function_call(cls, ast, symbols: SymbolTable):
+        _, name, _ = ast
+
+        if symbols.is_defined(name):
+            return symbols.get_return_type(name)
+        
+        return TYPE_NO_DEDUCIBLE
 
 
 class SemanticChecker:
@@ -263,11 +311,15 @@ class SemanticChecker:
         result = self.check(value, symbols)
 
         if tp is TYPE_NO_DEDUCIBLE:
-            self.errors.append(f'Cannot deduce type for variable <{name}>')
+            self.errors.append(f'Assigned expression for <{name}> has undefined type')
             result = False
         
         if a_type != TYPE_NO_DEDUCED and a_type != tp:
             self.errors.append(f'Type annotation <{a_type}> for <{name}> doesn\'t matches expression of type <{tp}>')
+            result = False
+        
+        if FORCE_TYPE_ANNOTATIONS and a_type is TYPE_NO_DEDUCED:
+            self.errors.append(f'Must provide type annotation for variable <{name}>')
             result = False
         
         if result:
@@ -286,7 +338,11 @@ class SemanticChecker:
             self.errors.append(f'While loop condition must be of type bool, {ct} deduced')
             result = False
 
+        symbols.add_loop()
+
         result = result and self.check(body, symbols)
+
+        symbols.remove_loop()
         return result
     
     def conditional(self, ast, symbols: SymbolTable):
@@ -394,10 +450,14 @@ class SemanticChecker:
 
             result = result and self.check(item, symbols)
 
-            if not result or tp is TYPE_NO_DEDUCIBLE:
+            if tp is TYPE_NO_DEDUCIBLE:
+                self.errors.append('No deducible type for array item')
+                break
+            if not result:
                 break
 
         type_matches = all(x == types[0] and x != None for x in types)
+    
         return type_matches and result
     
     def array_access(self, ast, symbols: SymbolTable):
@@ -442,10 +502,45 @@ class SemanticChecker:
         
         return True
         
-    
-    # def function(self, ast, symbols: SymbolTable):
-    #     TypeInferenceService.try_deduce_function_types(ast)
+    def function(self, ast, symbols: SymbolTable):
+        _, _, name, params, body, _ = ast
+        ret_type, param_types = TypeInferenceService.try_deduce_function_types(ast)
+        
+        symbols.define(name, TYPES['function'], None, ret_type, param_types.values())
 
+        result = True
+
+        _symbols = symbols.make_child()
+        for _, param, _ in params :
+            if param_types[param] in (TYPE_NO_DEDUCED, TYPE_NO_DEDUCIBLE, TYPE_NOT_FOUND):
+                self.errors.append(f'Type for param <{param}> could not be infered')
+                result = False
+            else:
+                _symbols.define(param, param_types[param])
+        
+        _symbols.set_function()
+        result = result and self.check(body, _symbols)
+        ast[5] = _symbols
+        return result
+    
+    def return_statement(self, ast, symbols: SymbolTable):
+        if not symbols.inside_function:
+            self.errors.append('Cannot use a return statement oustside a function')
+            return False
+        return True
+
+    def break_statement(self, ast, symbols: SymbolTable):
+        if not symbols.is_on_loop():
+            self.errors.append('Cannot use a break statement oustside a loop')
+            return False
+        return True
+    
+
+    def continue_statement(self, ast, symbols: SymbolTable):
+        if not symbols.is_on_loop():
+            self.errors.append('Cannot use a continue statement oustside a loop')
+            return False
+        return True
 
 
 TYPES = {
@@ -474,3 +569,5 @@ ANNOTATIONS = {TYPES[tp].annotation : TYPES[tp] for tp in TYPES}
 BUILTIN_FUNCTIONS = {
     'print' : Symbol(TYPES['string'], 0, TYPES['string'], (TYPES['object'],))
 }
+
+FORCE_TYPE_ANNOTATIONS = True
