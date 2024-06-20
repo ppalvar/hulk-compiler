@@ -1,0 +1,9 @@
+function min(a : Number, b : Number) : Number{
+    if (a >= b) return b;
+    return a;
+}
+
+function max(a : Number, b : Number) : Number{
+    if (a <= b) return b;
+    return a;
+}

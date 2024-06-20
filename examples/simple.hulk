@@ -1,1 +1,13 @@
-function hola(a: Number) : Number => a * a;
+function factorial(n: Number) : Number
+{
+    if (n <= 1)return 1;
+    return factorial(n - 1) * n;
+}
+
+function fibonacci(N: Number) : Number 
+{
+    if (N <= 1) return 1;
+    return fibonacci(N - 1) + fibonacci(N - 2);
+}
+
+let x:Number = fibonacci(10) in x+0;

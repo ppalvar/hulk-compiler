@@ -1,4 +1,4 @@
-let a = 1, b = 1, n = 10, c = 0 in {
+let a: Number = 1, b: Number = 1, n: Number = 10, c: Number = 0 in {
     while (n != 0) {
         c := a + b;
         b := a;

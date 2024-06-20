@@ -6,7 +6,7 @@ class SymbolType:
         self.type = type
         self.is_error = is_error
         self.is_array = False
-        self.size = 0
+        self.size = 4
 
     def __str__(self) -> str:
         return f'TYPE <{self.annotation}>'
@@ -34,7 +34,7 @@ class SymbolType:
         tpn = f'array:{items_type.type}'
 
         st = SymbolType(ann, tpn)
-        st.size = size
+        st.size = size * items_type.size
         st.is_array = True
         st.item_type = items_type
 
@@ -196,7 +196,7 @@ class TypeInferenceService:
             return TYPES['bool']
         elif operator in ('+', '-', '*', '/') and t1 == TYPES['number']:
             return TYPES['number']
-        elif operator in ('&&', '||') and t1 == TYPES[bool]:
+        elif operator in ('&&', '||') and t1 == TYPES['bool']:
             return TYPES['bool']
         else :
             return TYPE_NO_DEDUCIBLE
@@ -207,10 +207,10 @@ class TypeInferenceService:
 
         t1 = cls.deduce_type(ast[2], symbols)
         
-        if ast[1] in ('-', '+') and t1 == 'number':
-            return t1
-        elif ast[1] == '!' and t1 == 'bool':
-            return 'bool'
+        if ast[1] in ('-', '+') and t1 == TYPES['number']:
+            return TYPES['number']
+        elif ast[1] == '!' and t1 == TYPES['bool']:
+            return TYPES['bool']
         else:
             return TYPE_NO_DEDUCIBLE
     
@@ -270,7 +270,7 @@ class SemanticChecker:
 
     def check(self, ast, symbols: SymbolTable=None):
         if symbols == None:
-            symbols = SymbolTable()
+            symbols = self.symbols = SymbolTable()
         try:
             if type(ast[0]) != str:
                 result = True
