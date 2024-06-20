@@ -11,3 +11,4 @@ function fibonacci(N: Number) : Number
 }
 
 let x:Number = fibonacci(10) in x+0;
+/* comentario */

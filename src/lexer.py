@@ -3,7 +3,8 @@ from ply.lex import lex, Lexer
 keywords = ('TRUE', 'FALSE', 'IF', 'ELIF', 'ELSE', 'WHILE',
             'FOR', 'IN', 'LET', 'FUNCTION', 'RETURN', 'BREAK', 'CONTINUE')
 
-tokens = ( 'PLUS', 
+tokens = ( 'COMMENT',
+           'PLUS', 
            'MINUS', 
            'TIMES', 
            'DIV', 
@@ -34,6 +35,7 @@ tokens = ( 'PLUS',
            'RIGHTARROW') + keywords
 
 t_ignore = ' \t'
+t_ignore_COMMENT = r'/\*.*\*/' 
 
 t_PLUS = r'\+'
 t_MINUS = r'-'
