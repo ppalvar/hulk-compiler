@@ -19,10 +19,9 @@ def p_statement(p):
     """
     statement : instruction 
               | function_declaration
+              | type_declaration
     """
     p[0] = p[1]
-    #             function |
-    #             type
 
 
 def p_instruction(p):
@@ -119,6 +118,7 @@ def p_if_statement(p):
     """
     p[0] = ('if_statement', p[3], p[5])
 
+
 def p_elif_statement_list(p):
     """
     elif_statement_list :   elif_statement_list elif_statement
@@ -185,19 +185,20 @@ def p_executable_expression(p):
     """
     executable_expression : dynamic_expression SEMICOLON
     """
-    p[0] = p[1]
+    p[0] = ('executable_expression', p[1])
 
 
 def p_dynamic_expression(p):
     """
     dynamic_expression :  dynamic_expression CONCAT bool_expression
+                        | dynamic_expression DOUBLECONCAT bool_expression
                         | bool_expression
                         | array_declaration
     """
     if len(p) == 2:
         p[0] = p[1]
     elif len(p) == 4:
-        p[0] = ('str_concat', p[1], p[3])
+        p[0] = ('str_concat', p[2] == '@@', p[1], p[3])
 
 
 def p_bool_expression(p):
@@ -327,21 +328,32 @@ def p_expression_list(p):
 
 def p_function_call(p):
     """
-    function_call : IDENTIFIER LPAREN expression_list RPAREN
+    function_call : IDENTIFIER arguments
     """
-    p[0] = ('function_call', p[1], p[3])
+    p[0] = ('function_call', p[1], p[2])
+
+
+def p_arguments(p):
+    """
+    arguments : LPAREN expression_list RPAREN
+              | LPAREN RPAREN
+    """
+    if len(p) == 3:
+        p[0] = []
+    elif len(p) == 4:
+        p[0] = p[2]
 
 
 def p_function_declaration(p):
     """
-    function_declaration : FUNCTION IDENTIFIER LPAREN param_list RPAREN function_body
-                         | FUNCTION IDENTIFIER LPAREN param_list RPAREN type_annotation function_body
+    function_declaration : FUNCTION IDENTIFIER params function_body
+                         | FUNCTION IDENTIFIER params type_annotation function_body
     """
-    if len(p) == 7:
-        p[0] = ['function', None, p[2], p[4], p[6], None]
-    elif len(p) == 8:
-        p[0] = ['function', p[6], p[2], p[4], p[7], None]
-
+    if len(p) == 5:
+        p[0] = ['function', None, p[2], p[3], p[4], None]
+    elif len(p) == 6:
+        p[0] = ['function', p[4], p[2], p[3], p[5], None]
+    
 
 def p_function_body(p):
     """
@@ -352,6 +364,18 @@ def p_function_body(p):
         p[0] = p[1]
     elif len(p) == 3:
         p[0] = p[2]
+
+
+def p_params(p):
+    """
+    params : LPAREN param_list RPAREN
+           | LPAREN RPAREN
+    """
+    if len(p) == 3:
+        p[0] = []
+    elif len(p) == 4:
+        p[0] = p[2]
+
 
 def p_param_list(p):
     """
@@ -382,6 +406,39 @@ def p_type_annotation(p):
     type_annotation : COLON IDENTIFIER
     """
     p[0] = p[2]
+
+
+def p_type_declaration(p):
+    """
+    type_declaration : TYPE IDENTIFIER LCURLYBRACE type_declaration_body RCURLYBRACE
+    """
+
+    return ('type_declaration', p[2], p[4])
+
+
+def p_type_declaration_body(p):
+    """
+    type_declaration_body : type_declaration_body type_declaration_body_item
+                          | type_declaration_body_item
+    """
+    if len(p) == 2:
+        p[0] = {'properties':[], 'methods':[]}
+        tmp = p[1]
+    elif len(p) == 3:
+        p[0] = p[1]
+        tmp = p[2]
+
+    if tmp[0] == 'declaration':
+        p[0]['properties'].append(tmp)
+    elif tmp[0] == 'function':
+        p[0]['methods'].append(tmp)
+
+def p_type_declaration_body_item(p):
+    """
+    type_declaration_body_item : declaration
+                               | function_declaration
+    """
+    p[0] = p[1]
 
 
 def p_error(p):

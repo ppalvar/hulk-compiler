@@ -19,19 +19,16 @@ def main(data):
         return
 
     tac_generator = TacGenerator(semantic_checker.symbols)
-
     tac_generator.generate(ast)
-
-    print(tac_generator, '\n\n\n\n')
+    print(tac_generator)
 
     # codegen = MIPSCodeManager(semantic_checker.symbols)
     # codegen.generate_mips(tac_generator.code)
-
     # print(codegen)
     # codegen.store_code('out/a.s')
 
 
-filename = 'examples/simple.hulk'
+filename = 'examples/type_decl_simple.hulk'
 with open(filename, 'r') as file:
     data = file.read()
 

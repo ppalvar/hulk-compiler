@@ -6,6 +6,7 @@ from src.semantic_checker import SymbolTable, TYPES
 
 class MIPSCodeManager:
     def __init__(self, symbol_table) -> None:
+        self.data_section = []
         self.code = {}
         self.reset_registers()
         self.current_function = ''
@@ -26,6 +27,9 @@ class MIPSCodeManager:
     def store_code(self, filename: str):
         data_code = open('lib/data.s').read()
         prep_code = open('lib/code.s').read()
+
+        data_code += '\n'
+        data_code += '\n'.join([f'\t\t{name}:\t\t   {type}    {value}' for name, type, value in self.data_section])
 
         code = f'{data_code}\n\n.text\n{str(self)}\n\n{prep_code}'
 
@@ -55,14 +59,15 @@ class MIPSCodeManager:
                 self.add_line_to_code(line)
 
     def reset_registers(self) -> None:
+        # $t0, $s0 and $f12 registers are for special uses like float conversions and memory addressing
         self.normal_registers = {
-			'$t0' : None, '$t1' : None, '$t2' : None, '$t3' : None, '$t4' : None, '$t5' : None, 
-			'$t6' : None, '$t7' : None, '$t8' : None, '$t9' : None, '$s0' : None, '$s1' : None, 
+			'$t1' : None, '$t2' : None, '$t3' : None, '$t4' : None, '$t5' : None, 
+			'$t6' : None, '$t7' : None, '$t8' : None, '$t9' : None, '$s1' : None, 
 			'$s2' : None, '$s3' : None, '$s4' : None     
         }
 
         self.float_registers = {
-            '$f12' : None, '$f13' : None, '$f14' : None, '$f15' : None, '$f15' : None, 
+            '$f13' : None, '$f14' : None, '$f15' : None, '$f15' : None, 
             '$f16' : None, '$f17' : None, '$f18' : None,
         }
 
@@ -133,6 +138,7 @@ class MIPSCodeManager:
             inst = 'swc1' if symb.type == TYPES['number'] else 'sw'
 
             return f'{inst} {reg}, {self.sp_value-symb.alias-symb.type.size}($sp)'
+        
         elif self.symbol_table.is_defined(value):
             reg = self.get_register(t0)
             
@@ -147,6 +153,21 @@ class MIPSCodeManager:
                 return f'li.s {reg}, {value}'
             else:
                 return f'li {reg}, {int(value)}'
+
+        elif value.startswith('\"'): # this is a string
+            str_name = f'string_{len(self.data_section) + 1}'
+            self.data_section.append((str_name, '.asciiz', value))
+
+            if self.symbol_table.is_defined(t0):
+                symb = self.symbol_table.get_symbol(t0)
+
+                return (
+                    f'la $t0, {str_name}',
+                    f'sw $t0, {self.sp_value-symb.alias-symb.type.size}($sp)'
+                )
+            else:
+                reg = self.get_register(t0)
+                return f'la {reg}, {str_name}'
     
     def generate_clear(self, tac_code):
         _, name = tac_code
@@ -265,7 +286,7 @@ class MIPSCodeManager:
         _, params = tac_code
 
         total = 0
-        for name, type in params:
+        for name, type in reversed(params):
             total += type.size
             self.symbol_table.define(name, type, alias=-(total + 8))
 
@@ -279,10 +300,12 @@ class MIPSCodeManager:
         _, t0, type = tac_code
 
         self.current_params_size += type.size
+        self.sp_value += type.size
 
         reg = self.get_register(t0)
         
         inst = 'swc1' if type == TYPES['number'] else 'sw'
+        print(reg ,type.size, type)
         return (
             f'addi $sp, $sp, {-type.size}', 
             f'{inst} {reg}, 0($sp)'
@@ -296,8 +319,8 @@ class MIPSCodeManager:
         inst = 'mov.s' if self.symbol_table.get_return_type(func) == TYPES['number'] else 'move'
         retv = '$f0' if self.symbol_table.get_return_type(func) == TYPES['number'] else '$v0'
 
-        self.sp_value -= 92
         tmp = self.current_params_size
+        self.sp_value -= 92 + tmp
         self.current_params_size = 0
 
         return (
@@ -328,6 +351,67 @@ class MIPSCodeManager:
             'addi $sp, $sp, 8',
             'jr $ra'
         )
+
+    def generate_alloc_array(self, tac_code):
+        _, t0, tp, size = tac_code
+        
+        reg = self.get_register(t0)
+
+        return (
+            f'li $a0, {size * tp.size}',
+            'li $v0, 9',
+            'syscall',
+            f'move {reg}, $v0'
+        )
+
+    def generate_set_index(self, tac_code):
+        _, name, index, t0 = tac_code
+
+        symb = self.symbol_table.get_symbol(name)
+        inst = 'swc1' if symb.type.item_type == TYPES['number'] else 'sw'
+        reg = self.get_register(t0)
+        
+        if type(index) is int:
+            return (
+                f'lw $t0, {self.sp_value-symb.alias-symb.type.size}($sp)',
+                f'addi $t0, $t0, {index * 4}',
+                f'{inst} {reg}, 0($t0)'
+            )
+        else:
+            rgi = self.get_register(index)
+            return (
+                f'cvt.w.s $f12, {rgi}',
+                f'mfc1 $t0, $f12',
+                f'sll $t0, $t0, 2',
+                f'lw $s0, {self.sp_value-symb.alias-symb.type.size}($sp)',
+                f'add $t0, $t0, $s0',
+                f'{inst} {reg}, 0($t0)'
+            )
+    
+    def generate_get_index(self, tac_code):
+        _, t0, index, name = tac_code
+
+        symb = self.symbol_table.get_symbol(name)
+        inst = 'lwc1' if symb.type.item_type == TYPES['number'] else 'lw'
+        reg = self.get_register(t0)
+
+        if type(index) is int:
+            return (
+                f'lw $t0, {self.sp_value-symb.alias-symb.type.size}($sp)',
+                f'addi $t0, $t0, {index * 4}',
+                f'{inst} {reg}, 0($t0)'
+            )
+        else:
+            rgi = self.get_register(index)
+            return (
+                f'cvt.w.s $f12, {rgi}',
+                f'mfc1 $t0, $f12',
+                f'sll $t0, $t0, 2',
+                f'lw $s0, {self.sp_value-symb.alias-symb.type.size}($sp)',
+                f'add $t0, $t0, $s0',
+                f'{inst} {reg}, 0($t0)'
+            )
+
 
 
 def random_label():

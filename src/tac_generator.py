@@ -1,5 +1,5 @@
 from queue import LifoQueue as stack
-from src.semantic_checker import SymbolTable, TYPES
+from src.semantic_checker import SymbolTable, TYPES, TypeInferenceService
 
 class TacGenerator:
     def __init__(self, symbol_table: SymbolTable) -> None:
@@ -87,32 +87,32 @@ class TacGenerator:
         
         return t0
 
-    
     def declaration(self, ast, symb_table: SymbolTable):
         _, annotated_name, value = ast
         _, name, annotated_type = annotated_name
         tp = symb_table.get_type(name)
-        
+
         if tp.is_array:
-            self.create_array_alloc(name, tp, tp.size)
+            _, items = value
 
-            source, _value = value
-            if source == 'array_declaration_explicit':
-                for i, item in enumerate(_value):
-                    t0 = self.generate(item, symb_table)
-                    
-                    self.create_array_set(name, i, t0)
-            elif source == 'identifier':
-                t0 = self.generate(value, symb_table)
-                self.create_assign(name, t0)
-
-        else:
-            t0 = self.generate(value, symb_table)
+            tp.size = 4
+            
             self.create_declare(name, 1, tp)
+            
+            t0 = self.get_next_var()
+            self.create_array_alloc(t0, TypeInferenceService.deduce_type(items[0], symb_table), len(items))
+            self.create_assign(name, t0)
+
+            for i, item in enumerate(items):
+                t1 = self.generate(item)
+                self.create_array_set(name, i, t1)
+            
+        else:
+            self.create_declare(name, 1, tp)
+            t0 = self.generate(value, symb_table)
             self.create_assign(name, t0)
         
         return name
-
 
     def clear_variable(self, ast):
         # This method assumes the variable is stored in the stack
@@ -120,7 +120,6 @@ class TacGenerator:
         _, name, _ = annotated_name
 
         self.create_var_clear(name)
-
 
     def identifier(self, ast, symb_table: SymbolTable):
         _, name = ast
@@ -169,7 +168,10 @@ class TacGenerator:
         return var
 
     def compound_instruction(self, ast, symb_table: SymbolTable):
-        return self.generate(ast[1], symb_table)
+        _, instructions = ast
+        for line in instructions:
+            t0 = self.generate(line, symb_table)
+        return t0
     
     def conditional(self, ast, symb_table: SymbolTable):
         _, if_statement, elif_statements, else_statement = ast
@@ -218,12 +220,22 @@ class TacGenerator:
         return t2
     
     def array_declaration_explicit(self, ast, symb_table: SymbolTable):
-        raise NotImplementedError('array_declaration_explicit')
+        _, items = ast
+        
+        t0 = self.get_next_var()
+
+        self.create_array_alloc(t0, TypeInferenceService.deduce_type(items[0], symb_table), len(items))
+
+        for i, item in enumerate(items):
+            t1 = self.generate(item)
+            self.create_array_set(t0, i, t1)
+        
+        return t0
     
     def array_access(self, ast, symb_table: SymbolTable):
         _, name, index = ast
-
-        t0 = self.get_next_var()
+        
+        t0 = self.get_next_var(symb_table.get_type(name).item_type == TYPES['number'])
         t1 = self.generate(index, symb_table)
 
         self.create_array_get(t0, t1, name)
@@ -232,6 +244,9 @@ class TacGenerator:
     
     def function_call(self, ast, symb_table: SymbolTable):
         _, name, params = ast
+
+        if not symb_table.is_builtin(name):
+            name = f'function_{name}'
 
         self.create_function_call_start()
 
@@ -258,6 +273,9 @@ class TacGenerator:
     
     def function(self, ast, symb_table: SymbolTable):
         _, _, name, params, body, symbols = ast
+        
+        name = f'function_{name}'
+        
         self.set_current_function(name)
 
         tmp = []
@@ -269,7 +287,9 @@ class TacGenerator:
         
         t0 = self.generate(body, symbols)
 
-        self.create_return(t0)
+        if t0:
+            self.create_return(t0)
+        
         self.reset_current_function()
         return None
     
@@ -280,8 +300,34 @@ class TacGenerator:
 
         self.create_return(t0)
         return None
- 
+    
+    def executable_expression(self, ast, symb_table: SymbolTable):
+        _, expr = ast
+        t0 = self.generate(expr, symb_table)
+        return t0
+    
+    def str_concat(self, ast, symb_table: SymbolTable):
+        _, is_double, t0, t1 = ast
+
+        self.create_function_call_start()
+
+        t0 = self.generate(t0, symb_table)
+        self.create_set_param(t0, TYPES['string'])
+        t1 = self.generate(t1, symb_table)
+        self.create_set_param(t1, TYPES['string'])
+
+        t2 = self.get_next_var()
+        self.create_assign(t2, is_double)
+        self.create_set_param(t2, TYPES['bool'])
         
+        t3 = self.get_next_var()
+        self.create_func_call(t3, 'concat_strings')
+
+        self.create_function_call_end()
+
+        return t3
+
+  
     def get_next_var(self, is_float: bool = False) -> str:
         self.var_count += 1
         if is_float:
@@ -361,7 +407,8 @@ class TacGenerator:
         self.create_function_codespace()
         self.code[self.current_function].append(('clear', name))
     #endregion
-        
+    
+    #region context managers
     def enter_loop(self, start_label, end_label) -> None:
         self.loop_labels.put((start_label, end_label))
     
@@ -378,3 +425,4 @@ class TacGenerator:
     
     def reset_current_function(self):
         self.current_function = 'main'
+    #endregion

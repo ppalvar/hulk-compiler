@@ -58,7 +58,9 @@ class SymbolType:
         if annotation.startswith('Array_'):
             new_annotation = annotation[6 :]
             item_type = cls.resolve_from_annotation(new_annotation)
-            return cls.make_array_type(item_type, 0)
+            tmp = cls.make_array_type(item_type, 0)
+            tmp.size = 4
+            return tmp
         return TYPE_NOT_FOUND
     
     @classmethod
@@ -69,9 +71,12 @@ class SymbolType:
     
     @classmethod
     def can_convert(cls, type_a, type_b):
-        if type_a not in ALLOWED_CONVERTIONS:
-            return False
-        return type_b in ALLOWED_CONVERTIONS[type_a]
+        if type_a == type_b:
+            return True
+        # if type_a not in ALLOWED_CONVERTIONS:
+        #     return False
+        # return type_b in ALLOWED_CONVERTIONS[type_a]
+        return False
 
 
 class Symbol:
@@ -85,7 +90,7 @@ class Symbol:
 class SymbolTable:
     def __init__(self) -> None:
         self.symbols = dict()
-        self.inside_function = False
+        self.current_function = 'main'
         self.loops = []
 
     def make_child(self):
@@ -103,6 +108,9 @@ class SymbolTable:
     
     def is_defined(self, name: str):
         return name in self.symbols or name in BUILTIN_FUNCTIONS
+    
+    def is_builtin(self, name: str) -> bool:
+        return name in BUILTIN_FUNCTIONS
 
     def get_type(self, name: str) -> str:
         sym = self.get_symbol(name)
@@ -123,11 +131,11 @@ class SymbolTable:
             return BUILTIN_FUNCTIONS[name]
         return self.symbols[name]
     
-    def set_function(self) -> None:
-        self.inside_function = True
+    def set_function(self, name:str) -> None:
+        self.current_function = name
     
     def unset_function(self) -> None:
-        self.inside_function = False
+        self.current_function = None
     
     def add_loop(self) -> None:
         self.loops.append(None)
@@ -136,13 +144,15 @@ class SymbolTable:
         self.loops.pop(0)
 
     def is_on_function(self) -> bool:
-        return self.inside_function
+        return self.current_function != None
 
     def is_on_loop(self) -> bool:
         return 0 != len(self.loops)
 
 
 class TypeInferenceService:
+    return_statements_types = dict()
+
     #region: type inference for function parameters and return type
 
     @classmethod
@@ -166,8 +176,11 @@ class TypeInferenceService:
     #endregion
 
     @classmethod
-    def deduce_type(cls, ast, symbols: SymbolTable = None):
+    def deduce_type(cls, ast, symbols: SymbolTable):
         try:
+            if symbols.current_function not in cls.return_statements_types:
+                cls.return_statements_types[symbols.current_function] = []
+
             method = getattr(cls, 'deduce_type_' + ast[0], None)
             result = method(ast, symbols)
             
@@ -198,9 +211,23 @@ class TypeInferenceService:
             return TYPES['number']
         elif operator in ('&&', '||') and t1 == TYPES['bool']:
             return TYPES['bool']
+        elif operator in ('@', '@@') and t1 == TYPES['string']:
+            return TYPES['string']
         else :
             return TYPE_NO_DEDUCIBLE
     
+    @classmethod
+    def deduce_type_str_concat(cls, ast, symbols: SymbolTable):
+        _, _, t0, t1 = ast
+        
+        t0 = cls.deduce_type(t0, symbols)
+        t1 = cls.deduce_type(t1, symbols)
+
+        if t0 != t1 or t0 != TYPES['string']:
+            return TYPE_NO_DEDUCIBLE
+        
+        return TYPES['string']
+
     @classmethod
     def deduce_type_unary(cls, ast, symbols: SymbolTable):
         _, operator, term = ast
@@ -258,11 +285,98 @@ class TypeInferenceService:
     def deduce_type_function_call(cls, ast, symbols: SymbolTable):
         _, name, _ = ast
 
+        if not symbols.is_builtin(name):
+            name = f'function_{name}'
+
         if symbols.is_defined(name):
             return symbols.get_return_type(name)
         
         return TYPE_NO_DEDUCIBLE
 
+    @classmethod
+    def deduce_type_compound_instruction(cls, ast, symbols: SymbolTable):
+        return_type = TYPE_NO_DEDUCED
+
+        _, instructions = ast
+
+        for inst in instructions:
+            tp = cls.deduce_type(inst, symbols)
+            return_type = tp
+        
+        return return_type
+
+    @classmethod
+    def deduce_type_conditional(cls, ast, symbols: SymbolTable):
+        _, if_statement, elif_statements, else_statement = ast
+
+        tp = TYPE_NO_DEDUCED
+
+        if if_statement:
+            _, _, body = if_statement
+            tp = cls.deduce_type(body, symbols)
+        if elif_statements:
+            for elif_statement in elif_statements:
+                _, _, body = elif_statement
+                _tp = cls.deduce_type(body, symbols)
+                
+                if tp == TYPE_NO_DEDUCED or tp == _tp:
+                    tp = _tp
+                else:
+                    tp = TYPE_NO_DEDUCIBLE
+        if else_statement:
+            _, body = else_statement
+            _tp = cls.deduce_type(body, symbols)
+            
+            if tp == TYPE_NO_DEDUCED or tp == _tp:
+                tp = _tp
+            else:
+                tp = TYPE_NO_DEDUCIBLE
+        
+        return tp
+
+    @classmethod
+    def deduce_type_return_statement(cls, ast, symbols: SymbolTable):
+        _, expr = ast
+        tp = cls.deduce_type(expr, symbols)
+        cls.return_statements_types[symbols.current_function].append(tp)
+        return tp
+    
+    @classmethod
+    def deduce_type_executable_expression(cls, ast, symbols: SymbolTable):
+        _, expr = ast
+        return cls.deduce_type(expr, symbols)
+    
+    @classmethod
+    def deduce_type_var_inst(cls, ast, symbols: SymbolTable):
+        _, variables, body, _ = ast
+
+        _symbols = symbols.make_child()
+
+        for _, annotated_name, value in variables:
+            _, name, annotation = annotated_name
+            tp = SymbolType.resolve_from_annotation(annotation)
+            
+            _symbols.define(name, tp)
+        
+        return cls.deduce_type(body, _symbols)
+    
+    @classmethod
+    def deduce_type_while_loop(cls, ast, symbols: SymbolTable):
+        _, _, body = ast
+        return cls.deduce_type(body, symbols)
+    
+    @classmethod
+    def deduce_type_assignment(cls, ast, symbols: SymbolTable):
+        return TYPE_NOT_FOUND
+    
+    @classmethod
+    def deduce_type_continue_statement(cls, ast, symbols: SymbolTable):
+        return TYPE_NOT_FOUND
+    
+    @classmethod
+    def deduce_type_break_statement(cls, ast, symbols: SymbolTable):
+        return TYPE_NOT_FOUND
+    
 
 class SemanticChecker:
     def __init__(self) -> None:
@@ -322,11 +436,14 @@ class SemanticChecker:
             self.errors.append(f'Must provide type annotation for variable <{name}>')
             result = False
         
+        if tp.is_array and tp.item_type.is_array:
+            self.errors.append('Hulk does not support multi-dimensional arrays')
+            result = False
+
         if result:
             symbols.define(name, tp)
 
         return result
-
 
     def while_loop(self, ast, symbols: SymbolTable):
         _, condition, body = ast
@@ -408,7 +525,13 @@ class SemanticChecker:
         return True
     
     def str_concat(self, ast, symbols: SymbolTable):
-        result = self.check(ast[1], symbols) and self.check(ast[2], symbols)
+        result = self.check(ast[2], symbols) and self.check(ast[3], symbols)
+
+        tp = TypeInferenceService.deduce_type(ast, symbols)
+
+        if tp != TYPES['string']:
+            self.errors.append(f'Cannot concatenate non-string types')
+            result = False
 
         return result
     
@@ -416,7 +539,7 @@ class SemanticChecker:
         _, lvalue, rvalue = ast
         
         result0 = self.check(lvalue, symbols) if type(lvalue) != str else symbols.is_defined(lvalue)
-        tp_left = symbols.deduce_type(lvalue, symbols) if type(lvalue) != str else symbols.get_type(lvalue)
+        tp_left = TypeInferenceService.deduce_type(lvalue, symbols) if type(lvalue) != str else symbols.get_type(lvalue)
 
         if not result0:
             if type(lvalue) == str:
@@ -437,7 +560,11 @@ class SemanticChecker:
         return result0 and result1 and tp_left == tp_right and tp_right != TYPE_NO_DEDUCIBLE
     
     def compound_instruction(self, ast, symbols: SymbolTable):
-        return self.check(ast[1], symbols)
+        _, instructions = ast
+        result = True
+        for line in instructions:
+            result = result and self.check(line, symbols)
+        return result
     
     def array_declaration_explicit(self, ast, symbols: SymbolTable):
         _, items = ast
@@ -486,7 +613,11 @@ class SemanticChecker:
     def function_call(self, ast, symbols: SymbolTable):
         _, func, params = ast
         
-        result = symbols.is_defined(func)
+        if not symbols.is_builtin(func):
+            func = f'function_{func}'
+            result = symbols.is_defined(func)
+        else:
+            result = True
 
         if not result:
             self.errors.append(f'Function <{func}> not defined')
@@ -500,10 +631,17 @@ class SemanticChecker:
                 self.errors.append(F'Cannot convert parameter from <{tp}> to <{param_types[i]}>')
                 return False
         
+        if len(param_types) != i + 1:
+            self.errors.append(f'Function <{func[9:]}> requires {len(param_types)} ({i + 1} given)')
+            return False
+
         return True
         
     def function(self, ast, symbols: SymbolTable):
         _, _, name, params, body, _ = ast
+
+        name = f'function_{name}'
+
         ret_type, param_types = TypeInferenceService.try_deduce_function_types(ast)
         
         symbols.define(name, TYPES['function'], None, ret_type, param_types.values())
@@ -518,13 +656,34 @@ class SemanticChecker:
             else:
                 _symbols.define(param, param_types[param])
         
-        _symbols.set_function()
+        _symbols.set_function(name)
+
+        if body[0] == 'compound_instruction':
+            TypeInferenceService.deduce_type(body, _symbols)
+            tp = TypeInferenceService.return_statements_types[_symbols.current_function]
+            valid = all([tp[0] == t for t in tp])
+            if not valid:
+                self.errors.append(f'Function <{name[9:]}> has unconsistent return statements')
+                result = False
+            elif len(tp) == 0:
+                self.errors.append(f'Function <{name[9:]}> with compound body requires a return statement')
+                result = False
+            else:
+                tp = tp[0]
+        else:
+            tp = TypeInferenceService.deduce_type(body, _symbols)      
+
+        if tp != ret_type:
+            self.errors.append(f'Function <{name[9:]}> does not returns always type {ret_type} ({tp} found)')
+
+        result = result and tp == ret_type
         result = result and self.check(body, _symbols)
+
         ast[5] = _symbols
         return result
     
     def return_statement(self, ast, symbols: SymbolTable):
-        if not symbols.inside_function:
+        if not symbols.current_function:
             self.errors.append('Cannot use a return statement oustside a function')
             return False
         return True
@@ -535,12 +694,15 @@ class SemanticChecker:
             return False
         return True
     
-
     def continue_statement(self, ast, symbols: SymbolTable):
         if not symbols.is_on_loop():
             self.errors.append('Cannot use a continue statement oustside a loop')
             return False
         return True
+
+    def executable_expression(self, ast, symbols: SymbolTable):
+        _, expr = ast
+        return self.check(expr, symbols)
 
 
 TYPES = {
@@ -567,7 +729,9 @@ TYPE_NOT_FOUND = SymbolType('NOT_FOUND', 'NOT_FOUND', True)
 ANNOTATIONS = {TYPES[tp].annotation : TYPES[tp] for tp in TYPES}
 
 BUILTIN_FUNCTIONS = {
-    'print' : Symbol(TYPES['string'], 0, TYPES['string'], (TYPES['object'],))
+    'print' : Symbol(TYPES['function'], 0, TYPES['string'], (TYPES['string'],)),
+    'boolToString' : Symbol(TYPES['function'], 0, TYPES['string'], (TYPES['bool'],)),
+    'numberToString' : Symbol(TYPES['function'], 0, TYPES['string'], (TYPES['number'],)),
 }
 
 FORCE_TYPE_ANNOTATIONS = True

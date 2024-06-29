@@ -1,7 +1,8 @@
 from ply.lex import lex, Lexer
 
 keywords = ('TRUE', 'FALSE', 'IF', 'ELIF', 'ELSE', 'WHILE',
-            'FOR', 'IN', 'LET', 'FUNCTION', 'RETURN', 'BREAK', 'CONTINUE')
+            'FOR', 'IN', 'LET', 'FUNCTION', 'RETURN', 'BREAK', 'CONTINUE',
+            'TYPE', 'INHERITS')
 
 tokens = ( 'COMMENT',
            'PLUS', 
@@ -26,16 +27,18 @@ tokens = ( 'COMMENT',
            'LBRACKET',
            'RBRACKET',
            'IDENTIFIER',
+           'DOUBLECONCAT',
            'CONCAT',
            'COMMA',
            'EQUAL',
            'STRING',
            'LCURLYBRACE',
            'RCURLYBRACE',
-           'RIGHTARROW') + keywords
+           'RIGHTARROW',
+           'DOT') + keywords
 
 t_ignore = ' \t'
-t_ignore_COMMENT = r'/\*.*\*/' 
+t_ignore_COMMENT = r'/\*(.*\n*)*\*/' 
 
 t_PLUS = r'\+'
 t_MINUS = r'-'
@@ -59,12 +62,14 @@ t_EQUAL = r'='
 
 t_SEMICOLON = r';'
 t_COLON = r'\:'
+t_DOUBLECONCAT = r'\@\@'
 t_CONCAT = r'\@'
 t_COMMA = r'\,'
 t_LBRACKET = r'\['
 t_RBRACKET = r'\]'
 t_LCURLYBRACE = r'\{'
 t_RCURLYBRACE = r'\}'
+t_DOT = r'\.'
 
 t_IF = r'if'
 t_ELIF = r'elif'
@@ -77,6 +82,8 @@ t_FUNCTION = r'function'
 t_RETURN = r'return'
 t_BREAK = r'break'
 t_CONTINUE = r'continue'
+t_TYPE = r'type'
+t_INHERITS = r'inherits'
 
 t_STRING = r'\".*?\"'
 
