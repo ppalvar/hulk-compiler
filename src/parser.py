@@ -168,17 +168,9 @@ def p_instruction_list(p):
 
 def p_assignment(p):
     """
-    assignment : lvalue ASSIGN dynamic_expression SEMICOLON
+    assignment : property_access ASSIGN dynamic_expression SEMICOLON
     """
     p[0] = ('assignment', p[1], p[3])
-
-
-def p_lvalue(p):
-    """
-    lvalue : IDENTIFIER
-           | array_access
-    """
-    p[0] = p[1]
 
 
 def p_executable_expression(p):
@@ -267,12 +259,11 @@ def p_arithmetic_term(p):
 def p_arithmetic_factor(p):
     """
     arithmetic_factor :   NUMBER 
-                        | IDENTIFIER 
                         | STRING 
                         | TRUE
                         | FALSE
-                        | array_access
-                        | function_call
+                        | property_access
+                        | type_instantiation
                         | PLUS arithmetic_factor 
                         | MINUS arithmetic_factor 
                         | LPAREN bool_expression RPAREN 
@@ -281,7 +272,7 @@ def p_arithmetic_factor(p):
         tp = p.slice[1].type.lower()
         if tp in ('true', 'false'):
             p[0] = ('bool', p[1])
-        elif tp in ('array_access', 'function_call'):
+        elif tp in ('array_access', 'function_call', 'type_instantiation', 'property_access'):
             p[0] = p[1]
         else:
             p[0] = (tp, p[1])
@@ -289,7 +280,41 @@ def p_arithmetic_factor(p):
         p[0] = ('unary', p[1], p[2])
     elif len(p) == 4:
         p[0] = ('grouped', p[2])
-        
+
+
+def p_type_instantiation(p):
+    """
+    type_instantiation : NEW IDENTIFIER arguments
+    """
+    p[0] = ('instance', p[2], p[3])
+
+
+def p_property_access(p):
+    """
+    property_access : name_or_method DOT property_access
+                    | name_or_method
+    """
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 4:
+        p[0] = ('access', p[1], p[3])
+
+
+def p_name_or_method(p):
+    """
+    name_or_method : name
+                   | array_access
+                   | function_call
+    """
+    p[0] = p[1]
+
+
+def p_name(p):
+    """
+    name : IDENTIFIER
+    """
+    p[0] = ('name', p[1])
+
 
 def p_array_access(p):
     """
@@ -410,10 +435,24 @@ def p_type_annotation(p):
 
 def p_type_declaration(p):
     """
-    type_declaration : TYPE IDENTIFIER LCURLYBRACE type_declaration_body RCURLYBRACE
+    type_declaration : TYPE type_declaration_head INHERITS IDENTIFIER LCURLYBRACE type_declaration_body RCURLYBRACE
+                     | TYPE type_declaration_head LCURLYBRACE type_declaration_body RCURLYBRACE
     """
+    if len(p) == 6:
+        p[0] = ('type_declaration',None , p[2], p[4])
+    elif len(p) == (8):
+        p[0] = ('type_declaration',p[4] , p[2], p[6])
 
-    return ('type_declaration', p[2], p[4])
+
+def p_type_declaration_head(p):
+    """
+    type_declaration_head : IDENTIFIER params
+                          | IDENTIFIER
+    """
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 3:
+        p[0] = ('initialized_type', p[1], p[2])
 
 
 def p_type_declaration_body(p):
@@ -427,7 +466,7 @@ def p_type_declaration_body(p):
     elif len(p) == 3:
         p[0] = p[1]
         tmp = p[2]
-
+    
     if tmp[0] == 'declaration':
         p[0]['properties'].append(tmp)
     elif tmp[0] == 'function':
@@ -435,7 +474,7 @@ def p_type_declaration_body(p):
 
 def p_type_declaration_body_item(p):
     """
-    type_declaration_body_item : declaration
+    type_declaration_body_item : declaration SEMICOLON
                                | function_declaration
     """
     p[0] = p[1]

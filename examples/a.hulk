@@ -1,0 +1,6 @@
+let x: Number = 10 in while (x > 0) {
+    x := x - 1;
+    print(numberToString(x));
+}
+
+10;

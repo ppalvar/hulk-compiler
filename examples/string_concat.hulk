@@ -1,0 +1,3 @@
+let x: Bool = false in !x;
+let a : String = "Hola", b: String = "Mundo", bool: Bool = false
+    in a @ " " @ b @@ boolToString(bool);

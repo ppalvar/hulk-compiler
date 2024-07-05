@@ -2,7 +2,7 @@ from ply.lex import lex, Lexer
 
 keywords = ('TRUE', 'FALSE', 'IF', 'ELIF', 'ELSE', 'WHILE',
             'FOR', 'IN', 'LET', 'FUNCTION', 'RETURN', 'BREAK', 'CONTINUE',
-            'TYPE', 'INHERITS')
+            'TYPE', 'INHERITS', 'NEW')
 
 tokens = ( 'COMMENT',
            'PLUS', 
@@ -84,6 +84,7 @@ t_BREAK = r'break'
 t_CONTINUE = r'continue'
 t_TYPE = r'type'
 t_INHERITS = r'inherits'
+t_NEW = r'new'
 
 t_STRING = r'\".*?\"'
 

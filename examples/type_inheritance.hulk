@@ -1,0 +1,22 @@
+type Animal(name: String, age: Number)
+{
+    name: String = name;
+    age: Number = age;
+
+    function Eat(): String => print("the animal is eating");
+}
+
+type Dog(name: String, age: Number) inherits Animal
+{
+    function Walk(): String => print("the DOG is walking");
+}
+
+type Husky(name: String, age: Number, fluffyness:Number) inherits Dog
+{
+    fluffyness: Number = fluffyness;
+    function BarkWeirdly(): String => "wtf is that?!";
+}
+
+function something() : Number => 10;
+
+let h: Husky = new Husky("Pepe", 22, 1000) in h.Walk();

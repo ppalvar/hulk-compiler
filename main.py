@@ -20,15 +20,15 @@ def main(data):
 
     tac_generator = TacGenerator(semantic_checker.symbols)
     tac_generator.generate(ast)
-    print(tac_generator)
+    # print(tac_generator)
 
-    # codegen = MIPSCodeManager(semantic_checker.symbols)
-    # codegen.generate_mips(tac_generator.code)
-    # print(codegen)
-    # codegen.store_code('out/a.s')
+    codegen = MIPSCodeManager(semantic_checker.symbols)
+    codegen.generate_mips(tac_generator.code)
+    print(codegen)
+    codegen.store_code('out/a.s')
 
 
-filename = 'examples/type_decl_simple.hulk'
+filename = 'examples/type_inheritance.hulk'
 with open(filename, 'r') as file:
     data = file.read()
 

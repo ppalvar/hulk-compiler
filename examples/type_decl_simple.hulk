@@ -1,0 +1,5 @@
+type F{
+    function kaka(): Number => 10;
+}
+
+let f: F = new F() in f.kaka();

@@ -5,5 +5,5 @@ let a: Number = 1, b: Number = 1, n: Number = 10, c: Number = 0 in {
         a := c;
         n := n - 1;
     }
-    print(a);
+    print(numberToString(a));
 }

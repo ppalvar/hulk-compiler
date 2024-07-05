@@ -129,20 +129,20 @@ class MIPSCodeManager:
     def generate_assign(self, tac_code):
         _, t0, value = tac_code
 
-        if self.symbol_table.is_defined(t0):
+        if self.symbol_table.is_defined(t0, 'var'):
             if type(value) != str:
                 return
-            symb = self.symbol_table.get_symbol(t0)
+            symb = self.symbol_table.get_symbol(t0, 'var')
             reg = self.get_register(value)
 
             inst = 'swc1' if symb.type == TYPES['number'] else 'sw'
 
             return f'{inst} {reg}, {self.sp_value-symb.alias-symb.type.size}($sp)'
         
-        elif self.symbol_table.is_defined(value):
+        elif self.symbol_table.is_defined(value, 'var'):
             reg = self.get_register(t0)
             
-            symb = self.symbol_table.get_symbol(value)
+            symb = self.symbol_table.get_symbol(value, 'var')
             inst = 'lwc1' if symb.type == TYPES['number'] else 'lw'
 
             return f'{inst} {reg}, {self.sp_value-symb.alias-symb.type.size}($sp)'
@@ -158,8 +158,8 @@ class MIPSCodeManager:
             str_name = f'string_{len(self.data_section) + 1}'
             self.data_section.append((str_name, '.asciiz', value))
 
-            if self.symbol_table.is_defined(t0):
-                symb = self.symbol_table.get_symbol(t0)
+            if self.symbol_table.is_defined(t0, 'var'):
+                symb = self.symbol_table.get_symbol(t0, 'var')
 
                 return (
                     f'la $t0, {str_name}',
@@ -171,9 +171,9 @@ class MIPSCodeManager:
     
     def generate_clear(self, tac_code):
         _, name = tac_code
-        symb = self.symbol_table.get_symbol(name)
+        symb = self.symbol_table.get_symbol(name, 'var')
 
-        self.symbol_table.symbols.pop(name)
+        self.symbol_table.variables.pop(name)
 
         return f'addi $sp, $sp, {symb.type.size}'
     
@@ -262,7 +262,7 @@ class MIPSCodeManager:
     
     def generate_declare(self, tac_code):
         _, name, size, type = tac_code
-        self.symbol_table.define(name, type, alias=self.sp_value)
+        self.symbol_table.define_var(name, type, alias=self.sp_value)
 
         self.sp_value += type.size
 
@@ -288,7 +288,7 @@ class MIPSCodeManager:
         total = 0
         for name, type in reversed(params):
             total += type.size
-            self.symbol_table.define(name, type, alias=-(total + 8))
+            self.symbol_table.define_var(name, type, alias=-(total + 8))
 
         return 'nop'
 
@@ -305,7 +305,7 @@ class MIPSCodeManager:
         reg = self.get_register(t0)
         
         inst = 'swc1' if type == TYPES['number'] else 'sw'
-        print(reg ,type.size, type)
+        
         return (
             f'addi $sp, $sp, {-type.size}', 
             f'{inst} {reg}, 0($sp)'
@@ -367,7 +367,7 @@ class MIPSCodeManager:
     def generate_set_index(self, tac_code):
         _, name, index, t0 = tac_code
 
-        symb = self.symbol_table.get_symbol(name)
+        symb = self.symbol_table.get_symbol(name, 'var')
         inst = 'swc1' if symb.type.item_type == TYPES['number'] else 'sw'
         reg = self.get_register(t0)
         
@@ -391,7 +391,7 @@ class MIPSCodeManager:
     def generate_get_index(self, tac_code):
         _, t0, index, name = tac_code
 
-        symb = self.symbol_table.get_symbol(name)
+        symb = self.symbol_table.get_symbol(name, 'var')
         inst = 'lwc1' if symb.type.item_type == TYPES['number'] else 'lw'
         reg = self.get_register(t0)
 
@@ -411,7 +411,25 @@ class MIPSCodeManager:
                 f'add $t0, $t0, $s0',
                 f'{inst} {reg}, 0($t0)'
             )
+    
+    def generate_alloc(self, tac_code):
+        _, t0, type = tac_code
+        
+        r0 = self.get_register(t0)
 
+        return (f'li $a0, {type.size}',
+                'li $v0, 9',
+                'syscall',
+                f'move {r0}, $v0')
+
+    def generate_set(self, tac_code):
+        _, t0, addr, t1 = tac_code
+        
+        r0 = self.get_register(t0)
+        r1 = self.get_register(t1)
+
+        inst = 'swc1' if t1.startswith('f') else 'sw'
+        return f'{inst} {r1}, {addr}({r0})'
 
 
 def random_label():

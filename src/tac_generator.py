@@ -1,5 +1,5 @@
 from queue import LifoQueue as stack
-from src.semantic_checker import SymbolTable, TYPES, TypeInferenceService
+from src.semantic_checker import SymbolTable, SymbolType, TYPES, TypeInferenceService, ANNOTATIONS
 
 class TacGenerator:
     def __init__(self, symbol_table: SymbolTable) -> None:
@@ -8,6 +8,7 @@ class TacGenerator:
         self.loop_labels = stack()
         self.current_function = 'main'
         self.symbol_table = symbol_table
+        self.current_type = None
 
     def __str__(self) -> str:
         _code = []
@@ -30,6 +31,14 @@ class TacGenerator:
             return result
         except:
             raise
+    
+    def name(self, ast, symb_table: SymbolTable):
+        _, name = ast
+        t0 = self.get_next_var(symb_table.get_type(ast) == TYPES['number'])
+        
+        self.create_assign(t0, name)
+
+        return t0
     
     def binop(self, ast, symb_table: SymbolTable):
         t1 = self.generate(ast[2], symb_table)
@@ -245,20 +254,35 @@ class TacGenerator:
     def function_call(self, ast, symb_table: SymbolTable):
         _, name, params = ast
 
-        if not symb_table.is_builtin(name):
+        if name.startswith('type') or symb_table.is_builtin(name):
+            pass
+        elif symb_table.current_type == None:
             name = f'function_{name}'
+        else:
+            name = f'method_{self.current_type}_{name}'
+        
+            symb = symb_table.get_symbol(symb_table.current_type, 'type')
+            if name in symb.inheritance:
+                name = symb.inheritance[name]
+        
+        if name.startswith('type'):
+            param_types = symb_table.get_symbol(name[5 : ], 'type')
+            param_types = param_types.params if param_types != None else []
+            param_types = [p.type for p in param_types]
+        else:
+            param_types = symb_table.get_params_type(name)
 
         self.create_function_call_start()
 
         for i, param in enumerate(params):
             t0 = self.generate(param, symb_table)
-
-            self.create_set_param(t0, symb_table.get_params_type(name)[i])
+            self.create_set_param(t0, param_types[i])
         
         t1 = self.get_next_var(symb_table.get_return_type(name) == TYPES['number'])
 
         self.create_func_call(t1, name)
         self.create_function_call_end()
+        
         return t1
     
     def break_statement(self, ast, symb_table: SymbolTable):
@@ -274,15 +298,19 @@ class TacGenerator:
     def function(self, ast, symb_table: SymbolTable):
         _, _, name, params, body, symbols = ast
         
-        name = f'function_{name}'
-        
-        self.set_current_function(name)
+        if name.startswith('type'):
+            pass
+        elif self.current_type == None:
+            name = f'function_{name}'
+        else:
+            name = f'method_{self.current_type}_{name}'
 
         tmp = []
-        for i, _parm in enumerate(params):
+        self.set_current_function(name)
+        for i, _parm in enumerate(params): #TODO: this may have some issue
             _, param, _ = _parm
             tmp.append((param, symb_table.get_params_type(self.current_function)[i]))
-            
+        
         self.create_get_params(tuple(tmp))
         
         t0 = self.generate(body, symbols)
@@ -326,8 +354,108 @@ class TacGenerator:
         self.create_function_call_end()
 
         return t3
+    
+    def type_declaration(self, ast, symb_table: SymbolTable):
+        _, parent_type, name, body = ast
 
-  
+        params = []
+        if not isinstance(name, str):
+            _, name, params = name
+        
+        self.set_current_type(name)
+        
+        params = [nm for _, nm, _ in params]
+        params = [(e.name, e.type) for e in symb_table.get_symbol(name, 'type').params]
+
+        symbols = symb_table.make_child()
+        
+        for _name, _type in params:
+            symbols.define_var(_name, _type)
+
+        #region TypeConstructor
+        self.set_current_function(f'type_{name}')
+
+        self.create_get_params(tuple(params))
+
+        t0 = self.get_next_var()
+
+        self.create_object_alloc(t0, SymbolType.resolve_from_name(name))
+        
+        for i, prop in enumerate(body['properties']):
+            t1 = self.generate(prop[2], symbols)
+            self.create_prop_set(t0, i * 4, t1)
+        
+        self.create_return(t0)
+        #endregion
+
+        for method in body['methods']:
+            # method_name = method[2]
+            # method_name = f'type_{name}_method_{method_name}'
+
+            # method[2] = method_name
+            self.generate(method, symb_table.make_child_inside_type(name))
+
+        self.reset_current_type()
+        return t0
+    
+    def access(self, ast, symb_table: SymbolTable):
+        ast = self.flatten_access(ast)
+        
+        t0 = self.generate(ast[0])
+        f0 = self.get_next_var(True)
+
+        _type, _symb_table = self.resolve_inner_props(ast[0], symb_table)
+
+        r = None
+
+        for prop in ast[1 : ]:
+            tmp = prop
+
+            if prop[0] == 'function_call':
+                name = f'method_{_symb_table.current_type}_{prop[1]}'
+                symb = _symb_table.get_symbol(_symb_table.current_type, 'type')
+                if name in symb.inheritance:
+                    name = symb.inheritance[name]
+
+                self.create_function_call_start()
+
+                self.create_set_param(t0, _type)
+
+                for i, param in enumerate(prop[2]):
+                    _t0 = self.generate(param, symb_table)
+
+                    self.create_set_param(_t0, symb_table.get_params_type(name)[i])
+                
+                r = f0 if symb_table.get_return_type(name) == TYPES['number'] else t0
+
+                self.create_func_call(r, name)
+                self.create_function_call_end()
+                
+            elif prop[0] == 'array_access':
+                pass
+            elif prop[0] == 'name':
+                prop = prop[1]
+                r = t0 if symb_table.get_type(prop) != TYPES['number'] else f0
+                addr = _symb_table.object_property_address[_type.type][prop]
+                self.create_prop_get(r, t0, addr)
+
+            else:
+                raise Exception(f"There is no behavior for {tmp}")
+            
+            _type, _symb_table = self.resolve_inner_props(tmp, _symb_table)
+        return r
+
+    def instance(self, ast, symb_table: SymbolTable):
+        _, name, args = ast
+
+        # symb_table = symb_table.make_child_inside_type(name)
+
+        name = f'type_{name}'
+
+        ast = ('function_call', name, args)
+
+        return self.generate(ast, symb_table)
+
     def get_next_var(self, is_float: bool = False) -> str:
         self.var_count += 1
         if is_float:
@@ -406,6 +534,54 @@ class TacGenerator:
     def create_var_clear(self, name):
         self.create_function_codespace()
         self.code[self.current_function].append(('clear', name))
+    
+    def create_object_alloc(self, t0, type):
+        self.create_function_codespace()
+        self.code[self.current_function].append(('alloc', t0, type))
+    
+    def create_prop_set(self, t0, address, t1):
+        self.create_function_codespace()
+        self.code[self.current_function].append(('set', t0, address, t1))
+    
+    def create_prop_get(self, t0, obj, address):
+        self.create_function_codespace()
+        self.code[self.current_function].append(('set', t0, obj, address))
+    
+    @classmethod
+    def flatten_access(cls, access) -> list:
+        _, left, right = access
+
+        if right[0] in ('access', 'assignable'):
+            return [left] + cls.flatten_access(right)
+        
+        return [left, right]
+    
+    @classmethod
+    def resolve_inner_props(cls, prop, symbols: SymbolTable):
+        if prop[0] == 'function_call':
+            _, prop, _ = prop
+            func = f'method_{symbols.current_type}_{prop}'
+            symb = symbols.get_symbol(symbols.current_type, 'type')
+
+            if func in symb.inheritance:
+                func = symb.inheritance[func]
+            
+            type = symbols.get_return_type(func)
+
+        elif prop[0] == 'array_access':
+            _, prop, _ = prop
+            type = symbols.get_return_type(prop)
+            if type.is_array:
+                type = type.item_type
+            else:
+                type = None
+        elif prop[0] == 'name':
+            _, prop = prop
+            type = symbols.get_type(prop)
+        else:
+            raise Exception(f"There is no behavior for {prop}")
+
+        return (type, symbols.make_child_inside_type(type.type))
     #endregion
     
     #region context managers
@@ -425,4 +601,10 @@ class TacGenerator:
     
     def reset_current_function(self):
         self.current_function = 'main'
+    
+    def set_current_type(self, name: str):
+        self.current_type = name
+    
+    def reset_current_type(self):
+        self.current_type = None
     #endregion

@@ -1,0 +1,19 @@
+function something(arr: Array_Number, size: Number): Number 
+{
+    let i: Number = 0 in
+        while (i < size) {
+            arr[i] := 3.14;
+            i := i + 1;
+        }
+    return 0;
+}
+
+let a: Array_Number = [1,2,3,4,5] in 
+{
+    something(a, 5);
+    let i: Number = 0 in 
+    while (i < 5) {
+        a[i];
+        i := i + 1;
+    }
+}

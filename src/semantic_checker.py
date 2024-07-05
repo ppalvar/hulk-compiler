@@ -1,4 +1,5 @@
 import copy
+from typing import Literal
 
 class SymbolType:
     def __init__(self, annotation: str, type: str, is_error: bool = False) -> None:
@@ -15,6 +16,7 @@ class SymbolType:
 
     def __eq__(self, __value: object) -> bool:
         return  self  and __value and\
+                type(self) == type(__value) and\
                 self.annotation == __value.annotation  and\
                 self.type == __value.type and\
                 self.is_error == __value.is_error and\
@@ -78,77 +80,181 @@ class SymbolType:
         # return type_b in ALLOWED_CONVERTIONS[type_a]
         return False
 
+    @classmethod
+    def create_type(cls, type):
+        if not isinstance(type, SymbolObject):
+            raise Exception("cannot create non-type as a type")
+        
+        size = TYPES[type.parent_type.name].size if type.parent_type else 0
+        size += sum([4 for prop in type.properties])
+        
+        type = SymbolType(type.name, type.name)
+        type.size = size
 
+        TYPES[type.type] = ANNOTATIONS[type.annotation] = type
+    
+    @classmethod
+    def __getitem__(cls, index):
+        return TYPES[index]
+
+#region Symbols
 class Symbol:
-    def __init__(self, _type:str, alias: int, return_type: str = None, param_types: tuple[str] = None) -> None:
+    def __init__(self, name: str, _type: SymbolType, alias: int = 0) -> None:
+        self.name = name
         self.type = SymbolType.resolve_from_name(_type) if type(_type) is not SymbolType else _type
         self.alias = alias
-        self.return_type = SymbolType.resolve_from_name(return_type) if type(return_type) is not SymbolType else return_type
-        self.param_types = [SymbolType.resolve_from_name(name) if type(name) is not SymbolType else name for name in param_types] if param_types else None
+
+
+class SymbolFunction(Symbol):
+    def __init__(self, name: str, return_type: SymbolType, param_types: tuple[SymbolType]) -> None:
+        super().__init__(name, TYPES['function'], 0)
+        self.return_type = return_type
+        self.param_types = param_types
+
+
+class SymbolObject(Symbol):
+    def __init__(self,name: str, properties: list[Symbol], methods: list[SymbolFunction], params: list[SymbolType], parent_type = None) -> None:
+        super().__init__(name, TYPES['type'], 0)
+
+        if isinstance(parent_type, SymbolObject):
+            properties = list(parent_type.properties.values()) + properties
+            methods = list(parent_type.methods.values()) + methods
+            
+            self.inheritance = parent_type.inheritance
+            for symbol in parent_type.methods:
+                if symbol in self.inheritance:
+                    continue
+                inherit_name = symbol
+                tmp = inherit_name.split('_')[-1]
+                ref_name = f'method_{name}_{tmp}'
+                self.inheritance[ref_name] = inherit_name
+        else:
+            self.inheritance = dict()
+        
+
+        self.properties = {symbol.name: symbol for symbol in properties}
+        self.methods = {symbol.name: symbol for symbol in methods}
+        self.params = params
+        self.parent_type = parent_type
+#endregion
 
 
 class SymbolTable:
     def __init__(self) -> None:
-        self.symbols = dict()
+        self.variables = dict()
+        self.functions = dict()
+        self.types = dict()
+
         self.current_function = 'main'
-        self.loops = []
+        self.loops = 0
+        self.current_type = None
+
+        self.object_property_address = dict()
 
     def make_child(self):
-        return copy.deepcopy(self)
+        child = SymbolTable()
+
+        child.variables = self.variables.copy()
+        child.functions = self.functions.copy()
+        child.types = self.types.copy()
+        child.current_function = self.current_function[:]
+        child.loops = self.loops
+        child.current_type = self.current_type[:] if isinstance(self.current_type, str) else None
+        child.object_property_address = self.object_property_address.copy()
+
+        return child
     
-    def define(self, name: str, _type: str, alias: int=None, return_type: str = None, param_types: list[str] = None):
-        if alias == None:
-            alias = len(self.symbols)
-        if type(_type) is str:
-            _type = TYPES[_type]
-        elif type(_type) is not SymbolType:
-            raise Exception(f'Cannot use object of type <{type(_type)}> to typing a symbol')
+    def make_child_inside_type(self, type_name: str):
+        type = self.get_symbol(type_name, 'type')
+
+        if not type:
+            return None
         
-        self.symbols[name] = Symbol(_type, alias, return_type, param_types)
+        child = SymbolTable()
+
+        for prop in type.properties:
+            child.variables[prop] = type.properties[prop]
+        
+        for meth in type.methods:
+            child.functions[meth] = type.methods[meth]
+        
+        child.types = self.types.copy()
+        child.object_property_address = self.object_property_address.copy()
+        child.current_type = type_name
+        
+        return child
+
+    def define_var(self, name: str, type : SymbolType, alias = 0):
+        self.variables[name] = Symbol(name, type, alias)
     
-    def is_defined(self, name: str):
-        return name in self.symbols or name in BUILTIN_FUNCTIONS
+    def define_function(self, name: str, return_type: SymbolType, param_types: list[SymbolType]):
+        self.functions[name] = SymbolFunction(name, return_type, param_types)
+    
+    def define_type(self, name: str, properties: list[Symbol], methods: list[SymbolFunction], params: list[SymbolType], parent_type: SymbolObject = None):
+        self.types[name] = SymbolObject(name, properties, methods, params, parent_type)
+
+        self.object_property_address[name] = dict()
+
+        for i, prop in enumerate(properties):
+            self.object_property_address[name][prop.name] = i
+    
+    def is_defined(self, name: str, select: Literal['var', 'func', 'type', 'builtin']):
+        return self.get_symbol(name, select) != None
     
     def is_builtin(self, name: str) -> bool:
         return name in BUILTIN_FUNCTIONS
 
     def get_type(self, name: str) -> str:
-        sym = self.get_symbol(name)
+        sym = self.get_symbol(name, 'var')
         return sym.type if sym else None
     
     def get_return_type(self, name: str) -> str:
-        sym = self.get_symbol(name)
+        sym = self.get_symbol(name, 'func')
         return sym.return_type if sym else None
     
     def get_params_type(self, name: str) -> tuple[str]:
-        sym = self.get_symbol(name)
+        sym = self.get_symbol(name, 'func')
+        if not sym:
+            sym = self.get_symbol(name, 'builtin')
         return sym.param_types if sym else None
 
-    def get_symbol(self, name: str) -> Symbol|None:
-        if name not in self.symbols:
-            if name not in BUILTIN_FUNCTIONS:
-                return None
+    def get_symbol(self, name: str, select: Literal['var', 'func', 'type', 'builtin']) -> Symbol|None:
+        if name in self.variables and select == 'var':
+            return self.variables[name]
+        elif name in self.functions and select == 'func':
+            return self.functions[name]
+        elif name in self.types and select == 'type':
+            return self.types[name]
+        elif name in BUILTIN_FUNCTIONS and select == 'builtin':
             return BUILTIN_FUNCTIONS[name]
-        return self.symbols[name]
+        return None
     
     def set_function(self, name:str) -> None:
         self.current_function = name
     
     def unset_function(self) -> None:
-        self.current_function = None
+        self.current_function = 'main'
     
     def add_loop(self) -> None:
-        self.loops.append(None)
+        self.loops += 1
     
     def remove_loop(self) -> None:
-        self.loops.pop(0)
+        self.loops -= 1
 
     def is_on_function(self) -> bool:
-        return self.current_function != None
+        return self.current_function != 'main'
 
     def is_on_loop(self) -> bool:
-        return 0 != len(self.loops)
+        return 0 != self.loops
 
+    def set_current_type(self, name: str):
+        self.current_type = name
+    
+    def unset_current_type(self):
+        self.current_type = None
+    
+    def is_on_type_body(self) -> bool:
+        return self.current_type != None
 
 class TypeInferenceService:
     return_statements_types = dict()
@@ -167,11 +273,25 @@ class TypeInferenceService:
             param_type = SymbolType.resolve_from_annotation(annotation)
             param_types[param_name] = param_type
         
-        
         if FORCE_TYPE_ANNOTATIONS:
             return return_type, param_types
 
         raise NotImplementedError('Implement type inference for func parameters')
+
+    @classmethod
+    def try_deduce_properties_and_methods_types(cls, type):
+        _, _, name, body = type
+        
+        methods = {func[2] : cls.try_deduce_function_types(func) for func in body['methods']}
+
+        properties = dict()
+        for _, name, value in body['properties']:
+            _, name, annotation = name
+
+            type = SymbolType.resolve_from_annotation(annotation)
+            properties[name] = type
+
+        return methods, properties
 
     #endregion
 
@@ -285,13 +405,21 @@ class TypeInferenceService:
     def deduce_type_function_call(cls, ast, symbols: SymbolTable):
         _, name, _ = ast
 
-        if not symbols.is_builtin(name):
+        if not symbols.is_builtin(name) and symbols.is_on_type_body():
+            name = f'method_{symbols.current_type}_{name}'
+        elif not symbols.is_builtin(name):
             name = f'function_{name}'
 
-        if symbols.is_defined(name):
-            return symbols.get_return_type(name)
-        
-        return TYPE_NO_DEDUCIBLE
+        if not symbols.is_builtin(name):
+            if symbols.is_defined(name, 'func'):
+                return symbols.get_return_type(name)
+            
+            return TYPE_NO_DEDUCIBLE
+        else:
+            if symbols.is_defined(name, 'builtin'):
+                return symbols.get_symbol(name, 'builtin').return_type
+            
+            return TYPE_NO_DEDUCIBLE
 
     @classmethod
     def deduce_type_compound_instruction(cls, ast, symbols: SymbolTable):
@@ -356,7 +484,7 @@ class TypeInferenceService:
             _, name, annotation = annotated_name
             tp = SymbolType.resolve_from_annotation(annotation)
             
-            _symbols.define(name, tp)
+            _symbols.define_var(name, tp)
         
         return cls.deduce_type(body, _symbols)
     
@@ -377,27 +505,140 @@ class TypeInferenceService:
     def deduce_type_break_statement(cls, ast, symbols: SymbolTable):
         return TYPE_NOT_FOUND
     
+    @classmethod
+    def deduce_type_access(cls, ast, symbols: SymbolTable):
+        _, left, right = ast
+        
+        if left[0] == 'function_call':
+            _, left, _ = left
+            type = symbols.get_return_type(left)
+        elif left[0] == 'array_access':
+            _, left, _ = left
+            type = symbols.get_return_type(left)
+            if type.is_array:
+                type = type.item_type
+            else:
+                type = TYPE_NO_DEDUCIBLE
+        elif left[0] == 'name':
+            _, left = left
+            type = symbols.get_type(left)
+        else:
+            raise Exception(f"There is no behavior for {left}")
+        
+        if not type:
+            return TYPE_NO_DEDUCIBLE
+
+        _symbols = symbols.make_child_inside_type(type.type)
+        
+        if not isinstance(right, str):
+            return cls.deduce_type(right, _symbols)
+        
+        if _symbols.is_defined(right, 'var'):
+            return _symbols.get_type(right)
+        
+        return TYPE_NO_DEDUCIBLE
+    
+    @classmethod
+    def deduce_type_instance(cls, ast, symbols: SymbolTable):
+        _, type, params = ast
+        
+        ins = symbols.get_symbol(type, 'type')
+
+        if ins:
+            return TYPES[ins.name]
+        return TYPE_NO_DEDUCIBLE
+    
+    @classmethod
+    def deduce_type_name(cls, ast, symbols: SymbolTable):
+        _, name = ast
+
+        type = symbols.get_type(name)
+
+        return type if type != None else TYPE_NO_DEDUCIBLE
+
+    @classmethod
+    def deduce_type_assignable(cls, ast, symbols: SymbolTable):
+        _, left, right = ast
+
+        if left[0] == 'array_access':
+            _, left, _ = left
+            type = symbols.get_return_type(left)
+            if type != None and type.is_array:
+                type = type.item_type
+            else:
+                type = None
+        elif left[0] == 'name':
+            left = left[1]
+            type = symbols.get_type(left)
+        
+        if type == None:
+            return TYPE_NO_DEDUCIBLE
+        
+        _symbols = symbols.make_child_inside_type(type.type)
+        
+        if not isinstance(right, str):
+            return cls.deduce_type(right, _symbols)
+        
+        if _symbols.is_defined(right, 'var'):
+            right = _symbols.get_type(right)
+
+            if right != None:
+                return right
+        
+        return TYPE_NO_DEDUCIBLE
 
 class SemanticChecker:
     def __init__(self) -> None:
         self.errors = []
 
     def check(self, ast, symbols: SymbolTable=None):
-        if symbols == None:
-            symbols = self.symbols = SymbolTable()
+        result = True
+
+        # here we assume this is the first call to this method
+        if symbols == None: 
+            functions = []
+            types = []
+            main_code = []
+
+            for line in ast:
+                if line[0] == 'function':
+                    functions.append(line)
+                elif line[0] == 'type_declaration':
+                    types.append(line)
+                else:
+                    main_code.append(line)
+            
+            result = self.define_all_types(types)
+
+            if not result:
+                self.errors.append(f'Some types are being redefined')
+
+            self.symbols = symbols = self.check_functions_and_types(functions, types)
+
+            if symbols == None:
+                return False
+
+            for inst in functions + types:
+                result = self.check(inst, symbols) and result
+
+            return self.check(main_code, symbols) and result
         try:
+            #this is a patch for the case of an empty program
+            if not ast: 
+                return True
             if type(ast[0]) != str:
-                result = True
                 for line in ast:
                     result = result and self.check(line, symbols)
-                return result
-            else :
-                method = self.__getattribute__(ast[0])
-                result = method(ast, symbols)
                 
                 return result
+            
+            else :
+                method = self.__getattribute__(ast[0])
+                result = result and method(ast, symbols)
+
+                return result
         except:
-            # print(ast[0])
+            print('Error at:', ast)
             raise
     
     def var_inst(self, ast, symbols:SymbolTable):
@@ -441,7 +682,7 @@ class SemanticChecker:
             result = False
 
         if result:
-            symbols.define(name, tp)
+            symbols.define_var(name, tp)
 
         return result
 
@@ -594,7 +835,7 @@ class SemanticChecker:
 
         result = True
 
-        if not symbols.is_defined(name):
+        if not symbols.is_defined(name, 'var'):
             self.errors.append(f'Variable {name} used but not defined')
             result = False
         
@@ -613,17 +854,30 @@ class SemanticChecker:
     def function_call(self, ast, symbols: SymbolTable):
         _, func, params = ast
         
-        if not symbols.is_builtin(func):
-            func = f'function_{func}'
-            result = symbols.is_defined(func)
-        else:
-            result = True
+        if not symbols.is_builtin(func) and symbols.is_on_type_body():
+            symb = symbols.get_symbol(symbols.current_type, 'type')
+            func = f'method_{symbols.current_type}_{func}'
 
+            if func in symb.inheritance:
+                func = symb.inheritance[func]
+
+            result = symbols.is_defined(func, 'func')
+        elif not symbols.is_builtin(func):
+            func = f'function_{func}'
+            result = symbols.is_defined(func, 'func')
+        else:
+            result = symbols.is_defined(func, 'builtin')
+        
         if not result:
             self.errors.append(f'Function <{func}> not defined')
             return False
 
         param_types = symbols.get_params_type(func)
+
+        if symbols.is_on_type_body() and not symbols.is_builtin(func):
+            param_types = param_types[1:]
+
+        i = -1
         for i, param in enumerate(params):
             tp = TypeInferenceService.deduce_type(param, symbols)
             
@@ -632,19 +886,20 @@ class SemanticChecker:
                 return False
         
         if len(param_types) != i + 1:
-            self.errors.append(f'Function <{func[9:]}> requires {len(param_types)} ({i + 1} given)')
+            self.errors.append(f'Function <{func[9:]}> requires {len(param_types)} arguments ({i + 1} given)')
             return False
 
         return True
         
     def function(self, ast, symbols: SymbolTable):
         _, _, name, params, body, _ = ast
-
-        name = f'function_{name}'
+        
+        if not symbols.is_builtin(name) and symbols.is_on_type_body():
+            name = f'method_{symbols.current_type}_{name}'
+        elif not symbols.is_builtin(name):
+            name = f'function_{name}'
 
         ret_type, param_types = TypeInferenceService.try_deduce_function_types(ast)
-        
-        symbols.define(name, TYPES['function'], None, ret_type, param_types.values())
 
         result = True
 
@@ -654,7 +909,7 @@ class SemanticChecker:
                 self.errors.append(f'Type for param <{param}> could not be infered')
                 result = False
             else:
-                _symbols.define(param, param_types[param])
+                _symbols.define_var(param, param_types[param])
         
         _symbols.set_function(name)
 
@@ -675,18 +930,22 @@ class SemanticChecker:
 
         if tp != ret_type:
             self.errors.append(f'Function <{name[9:]}> does not returns always type {ret_type} ({tp} found)')
+            result = False
 
         result = result and tp == ret_type
-        result = result and self.check(body, _symbols)
+        result = self.check(body, _symbols) and result
 
         ast[5] = _symbols
         return result
     
     def return_statement(self, ast, symbols: SymbolTable):
-        if not symbols.current_function:
+        if not symbols.is_on_function():
             self.errors.append('Cannot use a return statement oustside a function')
             return False
-        return True
+        
+        _, expr = ast
+
+        return self.check(expr, symbols)
 
     def break_statement(self, ast, symbols: SymbolTable):
         if not symbols.is_on_loop():
@@ -703,23 +962,303 @@ class SemanticChecker:
     def executable_expression(self, ast, symbols: SymbolTable):
         _, expr = ast
         return self.check(expr, symbols)
+    
+    def name(self, ast, symbols: SymbolTable):
+        _, name = ast
 
+        return symbols.is_defined(name,'var')
+
+    def define_all_types(self, types):
+        for type in types:
+            _, _, name, _ = type
+            if not isinstance(name, str):
+                name = name[1]
+            
+            type = SymbolType(name, name, True)
+            
+            if name in TYPES:
+                return False
+
+            ANNOTATIONS[name] = TYPES[name] = type
+            
+        return True
+
+    def check_functions_and_types(self, functions, types) -> tuple[list[SymbolFunction], list[SymbolObject]]:
+        st = SymbolTable()
+
+        functions = functions.copy()
+        types = types.copy()
+
+        constructors = dict()
+
+        while True:
+            has_updated = False
+            has_finished = True
+
+            for i, func in enumerate(functions):
+                if func != None: has_finished = False
+                else: continue
+                _, _, name, _, _, _ = func
+                name = f'function_{name}'
+                ret_type, param_types = TypeInferenceService.try_deduce_function_types(func)
+                
+                if ret_type == TYPE_NOT_FOUND or TYPE_NOT_FOUND in param_types:
+                    continue
+
+                st.define_function(name, ret_type, list(param_types.values()))
+                functions[i] = None
+                has_updated = True
+            
+            for i, type in enumerate(types):
+                if type != None: has_finished = False
+                else: continue
+
+                _, parent_type, name, _ = type
+
+                if parent_type != None:
+                    _parent_type = st.get_symbol(parent_type, 'type')
+                    # parent_type = SymbolType.resolve_from_annotation(parent_type)
+                
+                    if parent_type == None:
+                        continue
+
+                    parent_type = SymbolType.resolve_from_annotation(_parent_type.name)
+                else:
+                    _parent_type = None
+
+                _methods, _properties = TypeInferenceService.try_deduce_properties_and_methods_types(type)
+                
+                params = []
+                if not isinstance(name, str):
+                    _, name, params = name
+                
+                if self.has_circular_reference(name, parent_type.type if parent_type else None, st):
+                    self.errors.append(f'Type declaration for <{name}> has circular references')
+                    return None
+                
+                if FORCE_TYPE_ANNOTATIONS:
+                    params = [Symbol(n, SymbolType.resolve_from_annotation(a)) for _, n, a in params]
+                else:
+                    raise NotImplementedError()
+                
+                if parent_type:
+                    inherited_params = self.get_inherited_params(st.get_symbol(parent_type.type, 'type'), st)
+                    _inherited_params = {t.name: t.type for t in inherited_params}
+                    _params = {t.name: t.type for t in params}
+
+                    for p in _inherited_params:
+                        if p not in _params:
+                            self.errors.append(f'Type declaration of <{name}> is missing inherited parameter <{p}> of type <{_inherited_params[p]}>')
+                            return None
+                        if _inherited_params[p] != _params[p]:
+                            self.errors.append(f'Inherited param <{p}> for type <{name}> must be of type <{_inherited_params[p]}>')
+                            return None
+
+                methods = []
+                properties = []
+                for method in _methods:
+                    return_type, param_types = _methods[method]
+                    if return_type == TYPE_NOT_FOUND or TYPE_NOT_FOUND in param_types.values():
+                        break
+                    
+                    param_types = [TYPES[name]] + list(param_types.values())
+
+                    methods.append(SymbolFunction(f'method_{name}_{method}', return_type, param_types))
+                else:    
+                    for prop in _properties:
+                        if _properties[prop] == TYPE_NOT_FOUND:
+                            break
+                        properties.append(Symbol(prop, _properties[prop]))
+                    else:
+                        # If hits here the type can be checked (it may be valid)
+                        if parent_type != TYPES['object'] and parent_type:
+                            type[3]['properties'].extend(constructors[parent_type.type])
+                        constructors[name] = type[3]['properties']
+
+                        has_updated = True
+                        st.define_type(name, properties, methods, params, _parent_type)
+                        SymbolType.create_type(st.get_symbol(name, 'type'))
+                        types[i] = None
+            
+            if has_finished:
+                return st
+            if not has_updated:
+                self.errors.append('Error while checking types declarations')
+                return None
+    
+    def has_circular_reference(self, type, parent_type, symbols: SymbolTable):
+        if not parent_type:
+            return False
+
+        inheritance = set()
+        inheritance.add(parent_type)
+
+        while True:
+            tmp = symbols.get_symbol(parent_type, 'type')
+            if not tmp: break
+            tmp = tmp.parent_type
+            if not tmp: break
+            
+            parent_type = tmp.type
+            if parent_type in inheritance:
+                return True
+            inheritance.add(parent_type)
+        return type in inheritance
+
+    def get_inherited_params(self, type: SymbolObject, symbols: SymbolTable):
+        params = []
+        
+        while type:
+            params.extend(type.params)
+
+            type = type.parent_type if type else None
+            if type: type = type.type
+            type = symbols.get_symbol(type, 'type')
+            
+        return params        
+
+    def type_declaration(self, ast, symbols: SymbolTable):
+        _, parent_type, name, body = ast
+        params = []
+
+        if not isinstance(name, str):
+            _, name, params = name
+        
+        symbols.set_current_type(name)
+
+        if FORCE_TYPE_ANNOTATIONS:
+            params = {n: SymbolType.resolve_from_annotation(a) for _, n, a in params}
+        else:
+            raise NotImplementedError()
+        
+        _symb = symbols.make_child()
+        for p in params:
+            _symb.define_var(p, params[p])
+
+        result = True
+        declared_props = set()
+        for prop in body['properties']:
+            nm = prop[1][1]
+            if nm in declared_props:
+                self.errors.append(f'Redeclaration of property <{nm}> from object <{name}>')
+            
+            declared_props.add(nm)
+            
+            tmp = self.check(prop, _symb.make_child())
+            result = tmp and result
+
+        methods = [[t, 
+                    ret, 
+                    nam, 
+                    [('annotated_identifier', 'self', name)] + par, 
+                    bod, None] 
+                        for t, ret, nam, par, bod, _ in body['methods']]
+        
+        result = all([self.check(method, symbols) for method in methods]) and result
+        
+        body['methods'] = methods #this puts a symbol table in each method
+
+        symbols.unset_current_type()
+        return result
+
+    def instance(self, ast, symbols: SymbolTable):
+        _, type, args = ast
+
+        sy = symbols.get_symbol(type, 'type')
+
+        if not sy:
+            return False
+        
+        args = [TypeInferenceService.deduce_type(arg, symbols) for arg in args]
+        
+        tmp = [s.type for s in sy.params]
+        result = all([x == y for x, y in zip(tmp, args)])
+        
+        if not result:
+            self.errors.append(f'Some constructor arguments for type <{type}> are incorrect')
+            return False
+        
+        result = len(sy.params) == len(args)
+
+        if not result:
+            self.errors.append(f'The constructor for type <{type}> takes {len(sy.params)}, {len(args)} given')
+            return False
+
+        return True
+
+    def assignable(self, ast, symbols: SymbolTable):
+        _, left, right = ast
+
+        if left[0] == 'array_access':
+            _, left, _ = left
+            type = symbols.get_return_type(left)
+            if type != None and type.is_array:
+                type = type.item_type
+            else:
+                type = None
+        elif  left[0] == 'name':
+            left = left[1]
+            type = symbols.get_type(left)
+        
+        if type == None:
+            self.errors.append(f'Property or variable <{left}> was not found')
+            return False
+        
+        _symbols = symbols.make_child_inside_type(type.type)
+        
+        if not isinstance(right, str):
+            return self.check(right, _symbols)
+        
+        if _symbols.is_defined(right, 'var'):
+            right = _symbols.get_type(right)
+
+            if right != None:
+                return True
+        self.errors.append(f'Property or variable <{right}> was not found')
+        return False
+    
+    def access(self, ast, symbols: SymbolTable):
+        _, left, right = ast
+        
+        if left[0] == 'function_call':
+            _, left, _ = left
+            type = symbols.get_return_type(left)
+        elif left[0] == 'array_access':
+            _, left, _ = left
+            type = symbols.get_return_type(left)
+            if type.is_array:
+                type = type.item_type
+            else:
+                type = TYPE_NO_DEDUCIBLE
+        elif left[0] == 'name':
+            _, left = left
+            type = symbols.get_type(left)
+        else:
+            raise Exception(f"There is no behavior for {left}")
+        
+        if not type:
+            self.errors.append(f'Cannot access property or variable <{left}>')
+            return False
+
+        _symbols = symbols.make_child_inside_type(type.type)
+        
+        if not isinstance(right, str):
+            return self.check(right, _symbols)
+        
+        if _symbols.is_defined(right, 'var'):
+            result = _symbols.get_type(right) != None
+            if not result:
+                self.errors.append(f'Cannot access property or variable <{right}>')
+        
+        raise Exception('This should never happen')
 
 TYPES = {
     'number' : SymbolType('Number', 'number'),
     'string' : SymbolType('String', 'string'),
     'bool' : SymbolType('Bool', 'bool'),
     'function': SymbolType('Function', 'function'),
+    'type': SymbolType('Type', 'type'),
     'object': SymbolType('Object', 'object'),
-}
-
-# TODO: change the default conversions
-ALLOWED_CONVERTIONS = {
-    TYPES['number'] : (TYPES['number'], TYPES['string'], TYPES['object']),
-    TYPES['string'] : (TYPES['string'], TYPES['object']),
-    TYPES['bool'] : (TYPES['bool'], TYPES['string'], TYPES['object']),
-    TYPES['object'] : (TYPES['string'], TYPES['object']),
-    TYPES['function'] : (TYPES['function'], TYPES['string'], TYPES['object']),
 }
 
 TYPE_NO_DEDUCED = SymbolType('NO_DEDUCED', 'NO_DEDUCED')
@@ -729,9 +1268,9 @@ TYPE_NOT_FOUND = SymbolType('NOT_FOUND', 'NOT_FOUND', True)
 ANNOTATIONS = {TYPES[tp].annotation : TYPES[tp] for tp in TYPES}
 
 BUILTIN_FUNCTIONS = {
-    'print' : Symbol(TYPES['function'], 0, TYPES['string'], (TYPES['string'],)),
-    'boolToString' : Symbol(TYPES['function'], 0, TYPES['string'], (TYPES['bool'],)),
-    'numberToString' : Symbol(TYPES['function'], 0, TYPES['string'], (TYPES['number'],)),
+    'print' : SymbolFunction('print', TYPES['string'], (TYPES['string'],)),
+    'boolToString' : SymbolFunction('boolToString', TYPES['string'], (TYPES['bool'],)),
+    'numberToString' : SymbolFunction('numberToString', TYPES['string'], (TYPES['number'],)),
 }
 
 FORCE_TYPE_ANNOTATIONS = True
