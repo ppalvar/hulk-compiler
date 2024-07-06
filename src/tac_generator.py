@@ -34,7 +34,7 @@ class TacGenerator:
     
     def name(self, ast, symb_table: SymbolTable):
         _, name = ast
-        t0 = self.get_next_var(symb_table.get_type(ast) == TYPES['number'])
+        t0 = self.get_next_var(symb_table.get_type(name) == TYPES['number'])
         
         self.create_assign(t0, name)
 
@@ -173,6 +173,8 @@ class TacGenerator:
             _, name, index = var
             t1 = self.generate(index, symb_table)
             self.create_array_set(name, t1, t0)
+        elif var[0] == 'name':
+            self.create_assign(var[1], t0)
         
         return var
 
@@ -268,7 +270,7 @@ class TacGenerator:
         if name.startswith('type'):
             param_types = symb_table.get_symbol(name[5 : ], 'type')
             param_types = param_types.params if param_types != None else []
-            param_types = [p.type for p in param_types]
+            param_types = [p.type for p in reversed(param_types)]
         else:
             param_types = symb_table.get_params_type(name)
 
@@ -421,7 +423,9 @@ class TacGenerator:
 
                 self.create_set_param(t0, _type)
 
-                for i, param in enumerate(prop[2]):
+                params = [p for p in prop[2]]
+
+                for i, param in enumerate(params):
                     _t0 = self.generate(param, symb_table)
 
                     self.create_set_param(_t0, symb_table.get_params_type(name)[i])
@@ -451,6 +455,8 @@ class TacGenerator:
         # symb_table = symb_table.make_child_inside_type(name)
 
         name = f'type_{name}'
+
+        args = [a for a in reversed(args)]
 
         ast = ('function_call', name, args)
 
@@ -545,7 +551,7 @@ class TacGenerator:
     
     def create_prop_get(self, t0, obj, address):
         self.create_function_codespace()
-        self.code[self.current_function].append(('set', t0, obj, address))
+        self.code[self.current_function].append(('get', t0, obj, address))
     
     @classmethod
     def flatten_access(cls, access) -> list:

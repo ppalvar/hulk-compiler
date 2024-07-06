@@ -1,6 +1,7 @@
 import os
 from os import path
 from uuid import uuid1
+from queue import LifoQueue as stack
 
 from src.semantic_checker import SymbolTable, TYPES
 
@@ -13,6 +14,7 @@ class MIPSCodeManager:
         self.symbol_table = symbol_table
         self.sp_value = 0
         self.current_params_size = 0
+        self.all_params_size = stack()
     
     def __str__(self) -> str:
         _code = []
@@ -141,9 +143,9 @@ class MIPSCodeManager:
         
         elif self.symbol_table.is_defined(value, 'var'):
             reg = self.get_register(t0)
-            
             symb = self.symbol_table.get_symbol(value, 'var')
-            inst = 'lwc1' if symb.type == TYPES['number'] else 'lw'
+            
+            inst = 'lwc1' if t0.startswith('f') else 'lw'
 
             return f'{inst} {reg}, {self.sp_value-symb.alias-symb.type.size}($sp)'
 
@@ -293,6 +295,8 @@ class MIPSCodeManager:
         return 'nop'
 
     def generate_function_call_start(self, tac_code):
+        self.all_params_size.put(self.current_params_size)
+        self.current_params_size = 0
         self.sp_value += 92
         return 'jal push_all'
     
@@ -331,6 +335,7 @@ class MIPSCodeManager:
         )
     
     def generate_function_call_end(self, tac_code):
+        self.current_params_size = self.all_params_size.get()
         return 'nop'
     
     def generate_return(self, tac_code):
@@ -430,6 +435,15 @@ class MIPSCodeManager:
 
         inst = 'swc1' if t1.startswith('f') else 'sw'
         return f'{inst} {r1}, {addr}({r0})'
+    
+    def generate_get(self, tac_code):
+        _, t0, t1, addr = tac_code
+        
+        r0 = self.get_register(t0)
+        r1 = self.get_register(t1)
+
+        inst = 'lwc1' if t1.startswith('f') else 'lw'
+        return f'{inst} {r0}, {addr}({r1})'
 
 
 def random_label():

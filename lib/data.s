@@ -4,3 +4,4 @@
         __false__:         .asciiz    "false"
         __undefined__:     .asciiz    "undefined"
         __newline__:       .asciiz    "\n" 
+        format: .asciiz "%d"
