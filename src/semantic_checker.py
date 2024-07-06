@@ -85,8 +85,8 @@ class SymbolType:
         if not isinstance(type, SymbolObject):
             raise Exception("cannot create non-type as a type")
         
-        size = TYPES[type.parent_type.name].size if type.parent_type else 0
-        size += sum([4 for prop in type.properties])
+        # size = TYPES[type.parent_type.name].size if type.parent_type else 0
+        size = sum([4 for prop in type.properties]) + 4
         
         type = SymbolType(type.name, type.name)
         type.size = size
@@ -193,7 +193,10 @@ class SymbolTable:
     def define_type(self, name: str, properties: list[Symbol], methods: list[SymbolFunction], params: list[SymbolType], parent_type: SymbolObject = None):
         self.types[name] = SymbolObject(name, properties, methods, params, parent_type)
 
-        self.object_property_address[name] = dict()
+        if parent_type:
+            self.object_property_address[name] = self.object_property_address[parent_type.name].copy()
+        else:
+            self.object_property_address[name] = dict()
 
         for i, prop in enumerate(properties):
             self.object_property_address[name][prop.name] = i

@@ -8,13 +8,13 @@ type Animal(name: String, age: Number)
 
 type Dog(name: String, age: Number) inherits Animal
 {
-    function Walk(): String => print("the DOG is walking");
+    function Walk(): String => print("Dog" @@ self.name @@ "is walking");
 }
 
 type Husky(name: String, age: Number, fluffyness:Number) inherits Dog
 {
     fluffyness: Number = fluffyness;
-    function BarkWeirdly(): String => "wtf is that?!";
+    function BeAdorable(): String => print("This husky is adorable...");
 }
 
 function something() : Number => 10;

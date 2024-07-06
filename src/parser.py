@@ -481,7 +481,13 @@ def p_type_declaration_body_item(p):
 
 
 def p_error(p):
-    print(f'Syntax error at {p.value!r} in line {p.lineno} col {p.lexpos}')
+    try:
+        print(f'Syntax error at {p.value!r} in line {p.lineno} col {p.lexpos}')
+    except:
+        print('There are some missing token(s)')
+    
+    IS_ANY_ERROR = True
 
 # Build the parser
+IS_ANY_ERROR = False
 parser = yacc()

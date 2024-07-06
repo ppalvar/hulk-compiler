@@ -1,12 +1,12 @@
-from src.parser import parser
+from src.parser import parser, IS_ANY_ERROR
 from src.semantic_checker import SemanticChecker
 from src.tac_generator import TacGenerator
 from src.codegen import MIPSCodeManager
 
 def main(data):
     ast = parser.parse(data)
-
-    if not ast:
+    
+    if IS_ANY_ERROR or not ast:
         print('Error while parsing')
         return
 
@@ -24,13 +24,12 @@ def main(data):
 
     codegen = MIPSCodeManager(semantic_checker.symbols)
     codegen.generate_mips(tac_generator.code)
-    print(codegen)
+    # print(codegen)
     codegen.store_code('out/a.s')
 
-
-filename = 'examples/type_inheritance.hulk'
-with open(filename, 'r') as file:
-    data = file.read()
-
 if __name__ == '__main__':
-    main(data)
+    filename = 'examples/type_inheritance.hulk'
+    
+    with open(filename, 'r') as file:
+        data = file.read()
+        main(data)

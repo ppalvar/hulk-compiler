@@ -1,0 +1,6 @@
+let x: Number = 0 in 
+    while (x < 1000) 
+    {
+        print("Number" @@ numberToString(x) @@ boolToString(false) @ "sin_espacio" @@ numberToString(x * x * x));
+        x := x + 1;
+    }
