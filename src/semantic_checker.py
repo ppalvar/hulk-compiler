@@ -526,7 +526,7 @@ class TypeInferenceService:
             type = symbols.get_return_type(left)
         elif left[0] == 'array_access':
             _, left, _ = left
-            type = symbols.get_return_type(left)
+            type = symbols.get_type(left)
             if type.is_array:
                 type = type.item_type
             else:

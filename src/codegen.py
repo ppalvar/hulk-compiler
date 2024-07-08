@@ -46,7 +46,11 @@ class MIPSCodeManager:
             self.reset_registers()
             self.current_function = function
             if function == 'main':
-                self.code[function] = []
+                self.code[function] = [
+                    'addi $sp, $sp, -4',
+                    'sw $ra, 0($sp)',
+                    'move $fp, $sp'
+                ]
             else:
                 # This is for reseting the current frame
                 # and not to mess with the caller's stack
@@ -59,6 +63,11 @@ class MIPSCodeManager:
 
             for line in tac[function]:
                 self.add_line_to_code(line)
+            
+            if function == 'main':
+                self.code[function].extend([
+                    'jal exit'
+                ])
 
     def reset_registers(self) -> None:
         # $t0, $s0 and $f12 registers are for special uses like float conversions and memory addressing
@@ -371,9 +380,9 @@ class MIPSCodeManager:
 
     def generate_set_index(self, tac_code):
         _, name, index, t0 = tac_code
-
+        
         symb = self.symbol_table.get_symbol(name, 'var')
-        inst = 'swc1' if symb.type.item_type == TYPES['number'] else 'sw'
+        inst = 'swc1' if t0.startswith('f') else 'sw'
         reg = self.get_register(t0)
         
         if type(index) is int:

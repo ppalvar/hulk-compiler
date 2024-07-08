@@ -1,0 +1,26 @@
+let x: A = new A() in 
+{
+    print(x.str);
+    x.str := "Mundo";
+    print(x.str);
+
+    print(numberToString(x.num));
+    x.num := 9999;
+    print(numberToString(x.num));
+}
+
+let x: Array_A = [new A(), new A()] in
+{
+    print(x[0].str);
+}
+
+type A
+{
+    num: Number = 1000;
+    str: String = "Hola\n";
+}
+
+type B
+{
+    arr: Array_Number = [1,2,3,4,5,6,7,8,9];
+}

@@ -101,6 +101,7 @@ class TacGenerator:
         _, name, annotated_type = annotated_name
         tp = symb_table.get_type(name)
 
+
         if tp.is_array:
             _, items = value
 
@@ -109,11 +110,11 @@ class TacGenerator:
             self.create_declare(name, 1, tp)
             
             t0 = self.get_next_var()
-            self.create_array_alloc(t0, TypeInferenceService.deduce_type(items[0], symb_table), len(items))
+            self.create_array_alloc(t0, tp.item_type, len(items))
             self.create_assign(name, t0)
 
             for i, item in enumerate(items):
-                t1 = self.generate(item)
+                t1 = self.generate(item, symb_table)
                 self.create_array_set(name, i, t1)
             
         else:
@@ -164,7 +165,7 @@ class TacGenerator:
 
     def assignment(self, ast, symb_table: SymbolTable):
         _, var, value = ast
-        
+
         t0 = self.generate(value, symb_table)
         
         if type(var) == str:
@@ -175,8 +176,37 @@ class TacGenerator:
             self.create_array_set(name, t1, t0)
         elif var[0] == 'name':
             self.create_assign(var[1], t0)
+        elif var[0] == 'access':
+            var = self.flatten_access(var)
+            
+            t1 = self.generate(var[0], symb_table)
+
+            _type, _symb_table = self.resolve_inner_props(var[0], symb_table)
+
+            for prop in var[1 : -1]:
+                tmp = prop
+                   
+                if prop[0] == 'array_access':
+                    pass
+                elif prop[0] == 'name':
+                    prop = prop[1]
+                    addr = _symb_table.object_property_address[_type.type][prop] * 4
+                    self.create_prop_get(t1, t1, addr)
+                else:
+                    raise Exception(f"There is no behavior for {tmp}")
+                
+                _type, _symb_table = self.resolve_inner_props(tmp, _symb_table)
+            
+            var = var[-1]
+            
+            if var[0] == 'name':
+                var = var[1]
+                addr = _symb_table.object_property_address[_type.type][var] * 4
+                self.create_prop_set(t1, addr, t0)
+            elif var[0] == 'array_access':
+                pass
         
-        return var
+        return t0
 
     def compound_instruction(self, ast, symb_table: SymbolTable):
         _, instructions = ast
@@ -238,14 +268,13 @@ class TacGenerator:
         self.create_array_alloc(t0, TypeInferenceService.deduce_type(items[0], symb_table), len(items))
 
         for i, item in enumerate(items):
-            t1 = self.generate(item)
+            t1 = self.generate(item, symb_table)
             self.create_array_set(t0, i, t1)
         
         return t0
     
     def array_access(self, ast, symb_table: SymbolTable):
         _, name, index = ast
-        
         t0 = self.get_next_var(symb_table.get_type(name).item_type == TYPES['number'])
         t1 = self.generate(index, symb_table)
 
@@ -390,6 +419,7 @@ class TacGenerator:
             self.create_prop_set(t0, addr, t1)
         
         self.create_return(t0)
+        self.reset_current_function()
         #endregion
 
         for method in body['methods']:
@@ -405,7 +435,7 @@ class TacGenerator:
     def access(self, ast, symb_table: SymbolTable):
         ast = self.flatten_access(ast)
         
-        t0 = self.generate(ast[0])
+        t0 = self.generate(ast[0], symb_table)
         f0 = self.get_next_var(True)
 
         _type, _symb_table = self.resolve_inner_props(ast[0], symb_table)
@@ -587,7 +617,7 @@ class TacGenerator:
 
         elif prop[0] == 'array_access':
             _, prop, _ = prop
-            type = symbols.get_return_type(prop)
+            type = symbols.get_type(prop)
             if type.is_array:
                 type = type.item_type
             else:
