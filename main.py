@@ -2,9 +2,12 @@ from src.parser import parser, IS_ANY_ERROR
 from src.semantic_checker import SemanticChecker
 from src.tac_generator import TacGenerator
 from src.codegen import MIPSCodeManager
+from src.utils import remove_comments
 
-def main(data):
-    ast = parser.parse(data)
+def main(input_code: str):
+    input_code = remove_comments(input_code)
+    
+    ast = parser.parse(input_code)
     
     if IS_ANY_ERROR or not ast:
         print('Error while parsing')
@@ -31,5 +34,5 @@ if __name__ == '__main__':
     filename = 'examples/type_inheritance.hulk'
     
     with open(filename, 'r') as file:
-        data = file.read()
-        main(data)
+        input_code = file.read()
+        main(input_code)

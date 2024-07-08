@@ -270,7 +270,7 @@ class TacGenerator:
         if name.startswith('type'):
             param_types = symb_table.get_symbol(name[5 : ], 'type')
             param_types = param_types.params if param_types != None else []
-            param_types = [p.type for p in reversed(param_types)]
+            param_types = [p.type for p in param_types]
         else:
             param_types = symb_table.get_params_type(name)
 
@@ -384,8 +384,10 @@ class TacGenerator:
         self.create_object_alloc(t0, SymbolType.resolve_from_name(name))
         
         for i, prop in enumerate(body['properties']):
+            prop_name = prop[1][1]
+            addr = symb_table.object_property_address[name][prop_name] * 4
             t1 = self.generate(prop[2], symbols)
-            self.create_prop_set(t0, i * 4, t1)
+            self.create_prop_set(t0, addr, t1)
         
         self.create_return(t0)
         #endregion
@@ -430,7 +432,7 @@ class TacGenerator:
 
                     self.create_set_param(_t0, symb_table.get_params_type(name)[i])
                 
-                r = f0 if symb_table.get_return_type(name) == TYPES['number'] else t0
+                r = f0 if _symb_table.get_return_type(name) == TYPES['number'] else t0
 
                 self.create_func_call(r, name)
                 self.create_function_call_end()
@@ -439,8 +441,8 @@ class TacGenerator:
                 pass
             elif prop[0] == 'name':
                 prop = prop[1]
-                r = t0 if symb_table.get_type(prop) != TYPES['number'] else f0
-                addr = _symb_table.object_property_address[_type.type][prop]
+                r = t0 if _symb_table.get_type(prop) != TYPES['number'] else f0
+                addr = _symb_table.object_property_address[_type.type][prop] * 4
                 self.create_prop_get(r, t0, addr)
 
             else:
@@ -456,7 +458,7 @@ class TacGenerator:
 
         name = f'type_{name}'
 
-        args = [a for a in reversed(args)]
+        # args = [a for a in reversed(args)]
 
         ast = ('function_call', name, args)
 
@@ -584,6 +586,9 @@ class TacGenerator:
         elif prop[0] == 'name':
             _, prop = prop
             type = symbols.get_type(prop)
+            if prop == 'self':
+                type_name = symbols.get_symbol(symbols.current_type, 'type').name
+                type = TYPES[type_name]
         else:
             raise Exception(f"There is no behavior for {prop}")
 

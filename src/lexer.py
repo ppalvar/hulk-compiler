@@ -4,8 +4,7 @@ keywords = ('TRUE', 'FALSE', 'IF', 'ELIF', 'ELSE', 'WHILE',
             'FOR', 'IN', 'LET', 'FUNCTION', 'RETURN', 'BREAK', 'CONTINUE',
             'TYPE', 'INHERITS', 'NEW')
 
-tokens = ( 'COMMENT',
-           'PLUS', 
+tokens = ( 'PLUS', 
            'MINUS', 
            'TIMES', 
            'DIV', 
@@ -38,7 +37,6 @@ tokens = ( 'COMMENT',
            'DOT') + keywords
 
 t_ignore = ' \t'
-t_ignore_COMMENT = r'/\*(.*\n*)*\*/' 
 
 t_PLUS = r'\+'
 t_MINUS = r'-'

@@ -442,7 +442,7 @@ class MIPSCodeManager:
         r0 = self.get_register(t0)
         r1 = self.get_register(t1)
 
-        inst = 'lwc1' if t1.startswith('f') else 'lw'
+        inst = 'lwc1' if t0.startswith('f') else 'lw'
         return f'{inst} {r0}, {addr}({r1})'
 
 

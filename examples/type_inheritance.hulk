@@ -14,9 +14,12 @@ type Dog(name: String, age: Number) inherits Animal
 type Husky(name: String, age: Number, fluffyness:Number) inherits Dog
 {
     fluffyness: Number = fluffyness;
-    function BeAdorable(): String => print("This husky is adorable...");
+    function BeAdorable(): String => print("his husky has a fluffyness of" @@ numberToString(self.fluffyness) @ ", it's adorable");
 }
 
-function something() : Number => 10;
-
-let h: Husky = new Husky("Pepe", 22, 1000) in h.Walk();
+let h: Husky = new Husky("Pepe", 22, 1000) in 
+{
+    h.Eat();
+    h.Walk();
+    h.BeAdorable();
+}

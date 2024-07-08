@@ -199,7 +199,9 @@ class SymbolTable:
             self.object_property_address[name] = dict()
 
         for i, prop in enumerate(properties):
-            self.object_property_address[name][prop.name] = i
+            if prop.name in self.object_property_address[name]:
+                continue
+            self.object_property_address[name][prop.name] = len( self.object_property_address[name])
     
     def is_defined(self, name: str, select: Literal['var', 'func', 'type', 'builtin']):
         return self.get_symbol(name, select) != None
