@@ -463,6 +463,15 @@ class TacGenerator:
         ast = ('function_call', name, args)
 
         return self.generate(ast, symb_table)
+    
+    def downcast(self, ast, symb_table: SymbolTable):
+        _, var, _ = ast
+        
+        t0 = self.get_next_var()
+
+        self.create_assign(t0, var[1])
+
+        return t0
 
     def get_next_var(self, is_float: bool = False) -> str:
         self.var_count += 1

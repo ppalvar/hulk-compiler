@@ -1,0 +1,19 @@
+type Vehicle(id: String)
+{
+    id: String = id;
+
+    function drive() : String => print("The vehicle" @@ self.id @@ "is driving");
+    function park() : String => print("The vehicle" @@ self.id @@ "is parking");
+}
+
+type Boat(id: String) inherits Vehicle 
+{
+    function drive() : String => print("The boat" @@ self.id @@ "is floating");
+}
+
+let b: Boat = new Boat("12345789"), v: Vehicle = b as Vehicle in {
+    b.drive();
+    b.park();
+    v.drive();
+    v.park();
+}

@@ -117,6 +117,10 @@ class SymbolObject(Symbol):
         super().__init__(name, TYPES['type'], 0)
 
         if isinstance(parent_type, SymbolObject):
+            self.ancestors = parent_type.ancestors
+
+            self.ancestors.append(parent_type)
+
             properties = list(parent_type.properties.values()) + properties
             methods = list(parent_type.methods.values()) + methods
             
@@ -127,8 +131,11 @@ class SymbolObject(Symbol):
                 inherit_name = symbol
                 tmp = inherit_name.split('_')[-1]
                 ref_name = f'method_{name}_{tmp}'
+                if ref_name in [s.name for s in methods]:
+                    continue
                 self.inheritance[ref_name] = inherit_name
         else:
+            self.ancestors = []
             self.inheritance = dict()
         
 
@@ -591,6 +598,20 @@ class TypeInferenceService:
                 return right
         
         return TYPE_NO_DEDUCIBLE
+    
+    @classmethod
+    def deduce_type_downcast(cls, ast, symbols: SymbolTable):
+        _, var, type = ast
+
+        var_type = symbols.get_type(var[1]).type
+        var_type = symbols.get_symbol(var_type, 'type')
+        
+        new_type = symbols.get_symbol(type[1], 'type')
+
+        if new_type == None or new_type not in var_type.ancestors:
+            return TYPE_NO_DEDUCIBLE
+        
+        return TYPES[new_type.name]
 
 class SemanticChecker:
     def __init__(self) -> None:
@@ -1256,6 +1277,24 @@ class SemanticChecker:
                 self.errors.append(f'Cannot access property or variable <{right}>')
         
         raise Exception('This should never happen')
+    
+    def downcast(self, ast, symbols: SymbolTable):
+        _, var, type = ast
+
+        var_type = symbols.get_type(var[1]).type
+        var_type = symbols.get_symbol(var_type, 'type')
+        
+        new_type = symbols.get_symbol(type[1], 'type')
+
+        if new_type == None:
+            self.errors.append(f'Cannot downcast to non existing type')
+            return False
+        
+        if new_type not in var_type.ancestors:
+            self.errors.append(f'Type <{TYPES[var_type.name]}> has no valid downcast for type <{TYPES[new_type.name]}>')
+        
+        
+        return TYPES[new_type.name]
 
 TYPES = {
     'number' : SymbolType('Number', 'number'),

@@ -31,7 +31,7 @@ def main(input_code: str):
     codegen.store_code('out/a.s')
 
 if __name__ == '__main__':
-    filename = 'examples/type_inheritance.hulk'
+    filename = 'examples/downcast.hulk'
     
     with open(filename, 'r') as file:
         input_code = file.read()

@@ -305,8 +305,16 @@ def p_name_or_method(p):
     name_or_method : name
                    | array_access
                    | function_call
+                   | downcast
     """
     p[0] = p[1]
+
+
+def p_downcast(p):
+    """
+    downcast : name AS name
+    """
+    p[0] = ('downcast', p[1], p[3])
 
 
 def p_name(p):
