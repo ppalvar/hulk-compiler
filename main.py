@@ -1,4 +1,4 @@
-from src.parser import parser, IS_ANY_ERROR
+from src.parser import parser, ERRORS
 from src.semantic_checker import SemanticChecker
 from src.tac_generator import TacGenerator
 from src.codegen import MIPSCodeManager
@@ -10,8 +10,9 @@ def main(input_code: str):
     
     ast = parser.parse(input_code)
     
-    if IS_ANY_ERROR or not ast:
-        print('Error while parsing')
+    if ERRORS or not ast:
+        for err in ERRORS:
+            print(err)
         return
 
     semantic_checker = SemanticChecker()

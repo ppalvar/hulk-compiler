@@ -698,19 +698,19 @@ class SemanticChecker:
         result = self.check(value, symbols)
 
         if tp is TYPE_NO_DEDUCIBLE:
-            self.errors.append(f'Assigned expression for <{name}> has undefined type')
+            self.errors.append(f'Assigned expression for <{name}> has undefined type, at line {ast.lineno}.')
             result = False
         
         if a_type != TYPE_NO_DEDUCED and a_type != tp:
-            self.errors.append(f'Type annotation <{a_type}> for <{name}> doesn\'t matches expression of type <{tp}>')
+            self.errors.append(f'Type annotation <{a_type}> for <{name}> doesn\'t matches expression of type <{tp}>, at line {ast.lineno}.')
             result = False
         
         if FORCE_TYPE_ANNOTATIONS and a_type is TYPE_NO_DEDUCED:
-            self.errors.append(f'Must provide type annotation for variable <{name}>')
+            self.errors.append(f'Must provide type annotation for variable <{name}>, at line {ast.lineno}.')
             result = False
         
         if tp.is_array and tp.item_type.is_array:
-            self.errors.append('Hulk does not support multi-dimensional arrays')
+            self.errors.append(f'Hulk does not support multi-dimensional arrays, at line {ast.lineno}.')
             result = False
 
         if result:
@@ -725,7 +725,7 @@ class SemanticChecker:
         ct = TypeInferenceService.deduce_type(condition, symbols)
 
         if ct != TYPES['bool']:
-            self.errors.append(f'While loop condition must be of type bool, {ct} deduced')
+            self.errors.append(f'While loop condition must be of type bool, {ct} deduced, at line {ast.lineno}.')
             result = False
 
         symbols.add_loop()
@@ -742,7 +742,7 @@ class SemanticChecker:
         ct = TypeInferenceService.deduce_type(condition, symbols)
 
         if ct != TYPES['bool']:
-            self.errors.append(f'If statement condition must be of type bool, {ct} deduced')
+            self.errors.append(f'If statement condition must be of type bool, {ct} deduced, at line {ast.lineno}.')
             result = False
         
         result = result and self.check(body, symbols)
@@ -763,7 +763,7 @@ class SemanticChecker:
         ct = TypeInferenceService.deduce_type(condition, symbols)
 
         if ct != TYPES['bool']:
-            self.errors.append(f'Elif statement condition must be of type bool, {ct} deduced')
+            self.errors.append(f'Elif statement condition must be of type bool, {ct} deduced, at line {ast.lineno}.')
             result = False
         
         result = result and self.check(body, symbols)
@@ -780,7 +780,7 @@ class SemanticChecker:
     def identifier(self, ast, symbols: SymbolTable):
         result = symbols.is_defined(ast[1])
         if not result:
-            self.errors.append(f'Variable {ast[1]} used but not defined')
+            self.errors.append(f'Variable {ast[1]} used but not defined, at line {ast.lineno}.')
         return result
     
     def grouped(self, ast, symbols: SymbolTable):
@@ -803,7 +803,7 @@ class SemanticChecker:
         tp = TypeInferenceService.deduce_type(ast, symbols)
 
         if tp != TYPES['string']:
-            self.errors.append(f'Cannot concatenate non-string types')
+            self.errors.append(f'Cannot concatenate non-string types, at line {ast.lineno}.')
             result = False
 
         return result
@@ -816,11 +816,11 @@ class SemanticChecker:
 
         if not result0:
             if type(lvalue) == str:
-                self.errors.append(f'Variable {lvalue} used but never declared')
+                self.errors.append(f'Variable {lvalue} used but never declared, at line {ast.lineno}.')
             elif lvalue[0] == 'array_access':
-                self.errors.append(f'Variable {lvalue[1]} used but never declared')
+                self.errors.append(f'Variable {lvalue[1]} used but never declared, at line {ast.lineno}.')
             else:
-                self.errors.append('Fatal Error: unassigned variable')
+                self.errors.append(f'Fatal Error: unassigned variable, at line {ast.lineno}.')
             
             return False
 
@@ -828,7 +828,7 @@ class SemanticChecker:
         tp_right = TypeInferenceService.deduce_type(rvalue, symbols)
 
         if tp_left != tp_right:
-            self.errors.append(f'Cannot convert type <{tp_right}> to <{tp_left}>')
+            self.errors.append(f'Cannot convert type <{tp_right}> to <{tp_left}>, at line {ast.lineno}.')
         
         return result0 and result1 and tp_left == tp_right and tp_right != TYPE_NO_DEDUCIBLE
     
@@ -851,7 +851,7 @@ class SemanticChecker:
             result = result and self.check(item, symbols)
 
             if tp is TYPE_NO_DEDUCIBLE:
-                self.errors.append('No deducible type for array item')
+                self.errors.append(f'No deducible type for array item, at line {ast.lineno}.')
                 break
             if not result:
                 break
@@ -874,18 +874,18 @@ class SemanticChecker:
         result = True
 
         if not symbols.is_defined(name, 'var'):
-            self.errors.append(f'Variable {name} used but not defined')
+            self.errors.append(f'Variable {name} used but not defined, at line {ast.lineno}.')
             result = False
         
         if result:
             tp = symbols.get_type(name)
             if not tp.is_array:
-                self.errors.append(f'Object of type <{tp}> cannot be indexed')
+                self.errors.append(f'Object of type <{tp}> cannot be indexed, at line {ast.lineno}.')
                 result = False
 
         if index_tp != TYPES['number']:
             print(index, symbols.variables)
-            self.errors.append('Can only index array using a number')
+            self.errors.append('Can only index array using a number, at line {ast.lineno}.')
             result = False
 
         return result
@@ -908,7 +908,7 @@ class SemanticChecker:
             result = symbols.is_defined(func, 'builtin')
         
         if not result:
-            self.errors.append(f'Function <{func}> not defined')
+            self.errors.append(f'Function <{func}> not defined, at line {ast.lineno}.')
             return False
 
         param_types = symbols.get_params_type(func)
@@ -921,11 +921,11 @@ class SemanticChecker:
             tp = TypeInferenceService.deduce_type(param, symbols)
             
             if not SymbolType.can_convert(tp, param_types[i]):
-                self.errors.append(F'Cannot convert parameter from <{tp}> to <{param_types[i]}>')
+                self.errors.append(F'Cannot convert parameter from <{tp}> to <{param_types[i]}>, at line {ast.lineno}.')
                 return False
         
         if len(param_types) != i + 1:
-            self.errors.append(f'Function <{func[9:]}> requires {len(param_types)} arguments ({i + 1} given)')
+            self.errors.append(f'Function <{func[9:]}> requires {len(param_types)} arguments ({i + 1} given), at line {ast.lineno}.')
             return False
 
         return True
@@ -945,7 +945,7 @@ class SemanticChecker:
         _symbols = symbols.make_child()
         for _, param, _ in params :
             if param_types[param] in (TYPE_NO_DEDUCED, TYPE_NO_DEDUCIBLE, TYPE_NOT_FOUND):
-                self.errors.append(f'Type for param <{param}> could not be infered')
+                self.errors.append(f'Type for param <{param}> could not be infered, at line {ast.lineno}.')
                 result = False
             else:
                 _symbols.define_var(param, param_types[param])
@@ -957,10 +957,10 @@ class SemanticChecker:
             tp = TypeInferenceService.return_statements_types[_symbols.current_function]
             valid = all([tp[0] == t for t in tp])
             if not valid:
-                self.errors.append(f'Function <{name[9:]}> has unconsistent return statements')
+                self.errors.append(f'Function <{name[9:]}> has unconsistent return statements, at line {ast.lineno}.')
                 result = False
             elif len(tp) == 0:
-                self.errors.append(f'Function <{name[9:]}> with compound body requires a return statement')
+                self.errors.append(f'Function <{name[9:]}> with compound body requires a return statement, at line {ast.lineno}.')
                 result = False
             else:
                 tp = tp[0]
@@ -968,7 +968,7 @@ class SemanticChecker:
             tp = TypeInferenceService.deduce_type(body, _symbols)      
 
         if tp != ret_type:
-            self.errors.append(f'Function <{name[9:]}> does not returns always type {ret_type} ({tp} found)')
+            self.errors.append(f'Function <{name[9:]}> does not returns always type {ret_type} ({tp} found), at line {ast.lineno}.')
             result = False
 
         result = result and tp == ret_type
@@ -979,7 +979,7 @@ class SemanticChecker:
     
     def return_statement(self, ast, symbols: SymbolTable):
         if not symbols.is_on_function():
-            self.errors.append('Cannot use a return statement oustside a function')
+            self.errors.append(f'Cannot use a return statement oustside a function, at line {ast.lineno}.')
             return False
         
         _, expr = ast
@@ -988,13 +988,13 @@ class SemanticChecker:
 
     def break_statement(self, ast, symbols: SymbolTable):
         if not symbols.is_on_loop():
-            self.errors.append('Cannot use a break statement oustside a loop')
+            self.errors.append(f'Cannot use a break statement oustside a loop, at line {ast.lineno}.')
             return False
         return True
     
     def continue_statement(self, ast, symbols: SymbolTable):
         if not symbols.is_on_loop():
-            self.errors.append('Cannot use a continue statement oustside a loop')
+            self.errors.append(f'Cannot use a continue statement oustside a loop, at line {ast.lineno}.')
             return False
         return True
 
@@ -1072,7 +1072,7 @@ class SemanticChecker:
                     _, name, params = name
                 
                 if self.has_circular_reference(name, parent_type.type if parent_type else None, st):
-                    self.errors.append(f'Type declaration for <{name}> has circular references')
+                    self.errors.append(f'Type declaration for <{name}> has circular references, at line {type.lineno}.')
                     return None
                 
                 if FORCE_TYPE_ANNOTATIONS:
@@ -1087,10 +1087,10 @@ class SemanticChecker:
 
                     for p in _inherited_params:
                         if p not in _params:
-                            self.errors.append(f'Type declaration of <{name}> is missing inherited parameter <{p}> of type <{_inherited_params[p]}>')
+                            self.errors.append(f'Type declaration of <{name}> is missing inherited parameter <{p}> of type <{_inherited_params[p]}>, at line {type.lineno}.')
                             return None
                         if _inherited_params[p] != _params[p]:
-                            self.errors.append(f'Inherited param <{p}> for type <{name}> must be of type <{_inherited_params[p]}>')
+                            self.errors.append(f'Inherited param <{p}> for type <{name}> must be of type <{_inherited_params[p]}>, at line {type.lineno}.')
                             return None
 
                 methods = []
@@ -1179,7 +1179,7 @@ class SemanticChecker:
         for prop in body['properties']:
             nm = prop[1][1]
             if nm in declared_props:
-                self.errors.append(f'Redeclaration of property <{nm}> from object <{name}>')
+                self.errors.append(f'Redeclaration of property <{nm}> from object <{name}>, at line {ast.lineno}.')
             
             declared_props.add(nm)
             
@@ -1214,13 +1214,13 @@ class SemanticChecker:
         result = all([x == y for x, y in zip(tmp, args)])
         
         if not result:
-            self.errors.append(f'Some constructor arguments for type <{type}> are incorrect')
+            self.errors.append(f'Some constructor arguments for type <{type}> are incorrect, at line {ast.lineno}.')
             return False
         
         result = len(sy.params) == len(args)
 
         if not result:
-            self.errors.append(f'The constructor for type <{type}> takes {len(sy.params)}, {len(args)} given')
+            self.errors.append(f'The constructor for type <{type}> takes {len(sy.params)}, {len(args)} given, at line {ast.lineno}.')
             return False
 
         return True
@@ -1245,7 +1245,7 @@ class SemanticChecker:
             raise Exception(f"There is no behavior for {left}")
         
         if not type:
-            self.errors.append(f'Cannot access property or variable <{left}>')
+            self.errors.append(f'Cannot access property or variable <{left}>, at line {ast.lineno}.')
             return False
 
         _symbols = symbols.make_child_inside_type(type.type)
@@ -1256,7 +1256,7 @@ class SemanticChecker:
         if _symbols.is_defined(right, 'var'):
             result = _symbols.get_type(right) != None
             if not result:
-                self.errors.append(f'Cannot access property or variable <{right}>')
+                self.errors.append(f'Cannot access property or variable <{right}>, at line {ast.lineno}.')
         
         raise Exception('This should never happen')
     
@@ -1269,11 +1269,11 @@ class SemanticChecker:
         new_type = symbols.get_symbol(type[1], 'type')
 
         if new_type == None:
-            self.errors.append(f'Cannot downcast to non existing type')
+            self.errors.append(f'Cannot downcast to non existing type, at line {ast.lineno}.')
             return False
         
         if new_type not in var_type.ancestors:
-            self.errors.append(f'Type <{TYPES[var_type.name]}> has no valid downcast for type <{TYPES[new_type.name]}>')
+            self.errors.append(f'Type <{TYPES[var_type.name]}> has no valid downcast for type <{TYPES[new_type.name]}>, at line {ast.lineno}.')
         
         
         return TYPES[new_type.name]
