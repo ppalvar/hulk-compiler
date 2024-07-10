@@ -102,7 +102,7 @@ class MIPSCodeManager:
         try:
             method = self.__getattribute__(f'generate_{tac_code[0]}')
             result = method(tac_code)
-            
+
             assert result != None
             
             if type(result) is str:
@@ -271,6 +271,8 @@ class MIPSCodeManager:
                 return f'neg.s {rg0}, {rg1}'
             case '+':
                 return ''
+            case '!':
+                return f'not {rg0}, {rg1}'
     
     def generate_declare(self, tac_code):
         _, name, size, type = tac_code
@@ -381,73 +383,9 @@ class MIPSCodeManager:
 
     def generate_set_index(self, tac_code):
         return self.get_set_index(tac_code, 'set')
-        # _, name, index, t0 = tac_code
-        
-        # symb = self.symbol_table.get_symbol(name, 'var')
-        # inst = 'swc1' if t0.startswith('f') else 'sw'
-        # reg = self.get_register(t0)
-
-        # if name[-1] == '#':
-        #     arr_reg = self.get_register(name)
-            
-        #     if type(index) is int:
-        #         return (
-        #             f'move $t0, {arr_reg}',
-        #             f'addi $t0, $t0, {index * 4}',
-        #             f'{inst} {reg}, 0($t0)'
-        #         )
-        #     else:
-        #         rgi = self.get_register(index)
-        #         return (
-        #             f'cvt.w.s $f12, {rgi}',
-        #             f'mfc1 $t0, $f12',
-        #             f'sll $t0, $t0, 2',
-        #             f'add $t0, $t0, {arr_reg}',
-        #             f'{inst} {reg}, 0($t0)'
-        #         )     
-
-        
-        # if type(index) is int:
-        #     return (
-        #         f'lw $t0, {self.sp_value-symb.alias-symb.type.size}($sp)',
-        #         f'addi $t0, $t0, {index * 4}',
-        #         f'{inst} {reg}, 0($t0)'
-        #     )
-        # else:
-        #     rgi = self.get_register(index)
-        #     return (
-        #         f'cvt.w.s $f12, {rgi}',
-        #         f'mfc1 $t0, $f12',
-        #         f'sll $t0, $t0, 2',
-        #         f'lw $s0, {self.sp_value-symb.alias-symb.type.size}($sp)',
-        #         f'add $t0, $t0, $s0',
-        #         f'{inst} {reg}, 0($t0)'
-        #     )
     
     def generate_get_index(self, tac_code):
         return self.get_set_index(tac_code, 'get')
-        # _, t0, index, name = tac_code
-
-        # symb = self.symbol_table.get_symbol(name, 'var')
-        # inst = 'lwc1' if t0.startswith('f') else 'lw'
-        # reg = self.get_register(t0)
-
-        # if type(index) is int:
-        #     return (
-        #         f'lw $t0, {self.sp_value-symb.alias-symb.type.size}($sp)',
-        #         f'addi $t0, $t0, {index * 4}',
-        #         f'{inst} {reg}, 0($t0)'
-        #     )
-        # else:
-        #     rgi = self.get_register(index)
-        #     return (
-        #         f'cvt.w.s $f12, {rgi}',
-        #         f'mfc1 $t0, $f12',
-        #         f'sll $t0, $t0, 2',
-        #         f'lw $s0, {self.sp_value-symb.alias-symb.type.size}($sp)',
-        #         f'add $t0, $t0, $s0',
-        #         f'{inst} {reg}, 0($t0)'
-        #     )
     
     def get_set_index(self, tac_code, get_set: Literal['get', 'set']):
         if get_set == 'set':
