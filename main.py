@@ -43,7 +43,7 @@ ENVIRONMENT_IS_MAIN = False
 
 if __name__ == '__main__':
     ENVIRONMENT_IS_MAIN = True
-    filename = 'examples/string_concat.hulk'
+    filename = 'examples/fib.hulk'
     
     with open(filename, 'r') as file:
         input_code = file.read()

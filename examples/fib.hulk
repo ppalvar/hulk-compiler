@@ -1,9 +1,24 @@
 let a: Number = 1, b: Number = 1, n: Number = 10, c: Number = 0 in {
-    while (n != 0) {
+    while (n > 0) {
         c := a + b;
         b := a;
         a := c;
         n := n - 1;
     }
     print(numberToString(a));
+
+    print(numberToString(fibonacci(12)));
+    print(numberToString(factorial(12)));
+}
+
+function fibonacci(n: Number) : Number
+{
+    if (n <= 1)return 1;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+function factorial(n: Number) : Number
+{
+    if (n < 1)return 1;
+    return factorial(n - 1) * n;
 }

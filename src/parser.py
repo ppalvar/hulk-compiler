@@ -121,14 +121,14 @@ def p_conditional(p):
                     | if_statement
     """
     if len(p) == 2:
-        p[0] = AstNode('conditional', p[1], None, None, p.slice[0].lineno)
+        p[0] = AstNode('conditional', p[1], None, None, p.lineno)
     elif len(p) == 3:
         if p[2][0] == 'else_statement':
-            p[0] = AstNode('conditional', p[1], None, p[2], p.slice[0].lineno)
+            p[0] = AstNode('conditional', p[1], None, p[2], p.lineno)
         else:
-            p[0] = AstNode('conditional', p[1], p[2], None, p.slice[0].lineno)
+            p[0] = AstNode('conditional', p[1], p[2], None, p.lineno)
     elif len(p) == 4:
-        p[0] = AstNode('conditional', p[1], p[2], p[3], p.slice[0].lineno)
+        p[0] = AstNode('conditional', p[1], p[2], p[3], p.lineno)
 
 
 def p_if_statement(p):
