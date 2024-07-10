@@ -10,6 +10,8 @@ class TacGenerator:
         self.symbol_table = symbol_table
         self.current_type = None
 
+        self.symbol_renames = dict()
+
     def __str__(self) -> str:
         _code = []
         for func in self.code:
@@ -34,7 +36,12 @@ class TacGenerator:
     
     def name(self, ast, symb_table: SymbolTable):
         _, name = ast
-        t0 = self.get_next_var(symb_table.get_type(name) == TYPES['number'])
+        type = symb_table.get_type(name)
+        
+        if not type and name in symb_table.globals:
+            type = symb_table.globals[name].type
+
+        t0 = self.get_next_var(type == TYPES['number'])
         
         self.create_assign(t0, name)
 
@@ -178,16 +185,21 @@ class TacGenerator:
             self.create_assign(var[1], t0)
         elif var[0] == 'access':
             var = self.flatten_access(var)
-            
-            t1 = self.generate(var[0], symb_table)
 
+            t1 = self.generate(var[0], symb_table)
             _type, _symb_table = self.resolve_inner_props(var[0], symb_table)
 
             for prop in var[1 : -1]:
                 tmp = prop
                    
                 if prop[0] == 'array_access':
-                    pass
+                    _, prop, index = prop
+                
+                    addr = _symb_table.object_property_address[_symb_table.current_type][prop] * 4
+                    self.create_prop_get(t1, t1, addr)
+                    
+                    index = self.generate(index, _symb_table)
+                    self.create_array_get(t1, index, t1)
                 elif prop[0] == 'name':
                     prop = prop[1]
                     addr = _symb_table.object_property_address[_type.type][prop] * 4
@@ -204,7 +216,14 @@ class TacGenerator:
                 addr = _symb_table.object_property_address[_type.type][var] * 4
                 self.create_prop_set(t1, addr, t0)
             elif var[0] == 'array_access':
-                pass
+                _, var, index = var
+                
+                addr = _symb_table.object_property_address[_symb_table.current_type][var] * 4
+                self.create_prop_get(t1, t1, addr)
+                
+                index = self.generate(index, _symb_table)
+                self.create_array_set(t1, index, t0)
+
         
         return t0
 
@@ -338,7 +357,8 @@ class TacGenerator:
 
         tmp = []
         self.set_current_function(name)
-        for i, _parm in enumerate(params): #TODO: this may have some issue
+
+        for i, _parm in enumerate(params):
             _, param, _ = _parm
             tmp.append((param, symb_table.get_params_type(self.current_function)[i]))
         
@@ -468,7 +488,15 @@ class TacGenerator:
                 self.create_function_call_end()
                 
             elif prop[0] == 'array_access':
-                pass
+                _, prop, index = prop
+                addr = _symb_table.object_property_address[_type.type][prop] * 4
+                self.create_prop_get(t0, t0, addr)
+
+                index = self.generate(index, _symb_table)
+
+                r = t0 if _symb_table.get_type(prop).item_type != TYPES['number'] else f0
+                
+                self.create_array_get(r, index, t0)
             elif prop[0] == 'name':
                 prop = prop[1]
                 r = t0 if _symb_table.get_type(prop) != TYPES['number'] else f0
@@ -496,6 +524,7 @@ class TacGenerator:
     
     def downcast(self, ast, symb_table: SymbolTable):
         _, var, _ = ast
+
         
         t0 = self.get_next_var()
 

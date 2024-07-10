@@ -24,12 +24,14 @@ def main(input_code: str):
 
     tac_generator = TacGenerator(semantic_checker.symbols)
     tac_generator.generate(ast)
-    print(tac_generator)
+    # print(tac_generator)
 
     codegen = MIPSCodeManager(semantic_checker.symbols)
     codegen.generate_mips(tac_generator.code)
     # print(codegen)
     codegen.store_code('out/a.s')
+
+    print("Compiled Succesfully!")
 
 if __name__ == '__main__':
     filename = 'examples/type_properties.hulk'

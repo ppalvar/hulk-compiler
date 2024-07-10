@@ -151,6 +151,7 @@ class SymbolTable:
         self.variables = dict()
         self.functions = dict()
         self.types = dict()
+        self.globals = dict()
 
         self.current_function = 'main'
         self.loops = 0
@@ -164,6 +165,7 @@ class SymbolTable:
         child.variables = self.variables.copy()
         child.functions = self.functions.copy()
         child.types = self.types.copy()
+        child.globals = self.globals.copy()
         child.current_function = self.current_function[:]
         child.loops = self.loops
         child.current_type = self.current_type[:] if isinstance(self.current_type, str) else None
@@ -178,6 +180,11 @@ class SymbolTable:
             return None
         
         child = SymbolTable()
+        
+        if not self.is_on_type_body():
+            child.globals = self.variables
+        else:
+            child.globals = self.globals
 
         for prop in type.properties:
             child.variables[prop] = type.properties[prop]
@@ -440,8 +447,7 @@ class TypeInferenceService:
         _, instructions = ast
 
         for inst in instructions:
-            tp = cls.deduce_type(inst, symbols)
-            return_type = tp
+            return_type = cls.deduce_type(inst, symbols)
         
         return return_type
 
@@ -859,6 +865,12 @@ class SemanticChecker:
 
         index_tp = TypeInferenceService.deduce_type(index, symbols)
 
+        if index_tp == TYPE_NO_DEDUCIBLE:
+            _symbols = symbols.make_child()
+            _symbols.unset_current_type()
+            _symbols.variables = _symbols.globals
+            index_tp = TypeInferenceService.deduce_type(index, _symbols)
+
         result = True
 
         if not symbols.is_defined(name, 'var'):
@@ -872,6 +884,7 @@ class SemanticChecker:
                 result = False
 
         if index_tp != TYPES['number']:
+            print(index, symbols.variables)
             self.errors.append('Can only index array using a number')
             result = False
 
@@ -1211,37 +1224,6 @@ class SemanticChecker:
             return False
 
         return True
-
-    def assignable(self, ast, symbols: SymbolTable):
-        _, left, right = ast
-
-        if left[0] == 'array_access':
-            _, left, _ = left
-            type = symbols.get_return_type(left)
-            if type != None and type.is_array:
-                type = type.item_type
-            else:
-                type = None
-        elif  left[0] == 'name':
-            left = left[1]
-            type = symbols.get_type(left)
-        
-        if type == None:
-            self.errors.append(f'Property or variable <{left}> was not found')
-            return False
-        
-        _symbols = symbols.make_child_inside_type(type.type)
-        
-        if not isinstance(right, str):
-            return self.check(right, _symbols)
-        
-        if _symbols.is_defined(right, 'var'):
-            right = _symbols.get_type(right)
-
-            if right != None:
-                return True
-        self.errors.append(f'Property or variable <{right}> was not found')
-        return False
     
     def access(self, ast, symbols: SymbolTable):
         _, left, right = ast
@@ -1251,7 +1233,7 @@ class SemanticChecker:
             type = symbols.get_return_type(left)
         elif left[0] == 'array_access':
             _, left, _ = left
-            type = symbols.get_return_type(left)
+            type = symbols.get_type(left)
             if type.is_array:
                 type = type.item_type
             else:

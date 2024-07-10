@@ -1,7 +1,7 @@
 from ply.lex import lex, Lexer
 
 keywords = ('TRUE', 'FALSE', 'IF', 'ELIF', 'ELSE', 'WHILE',
-            'FOR', 'IN', 'LET', 'FUNCTION', 'RETURN', 'BREAK', 'CONTINUE',
+            'IN', 'LET', 'FUNCTION', 'RETURN', 'BREAK', 'CONTINUE',
             'TYPE', 'INHERITS', 'NEW', 'AS')
 
 tokens = ( 'PLUS', 
@@ -70,10 +70,8 @@ t_RCURLYBRACE = r'\}'
 t_DOT = r'\.'
 
 t_IF = r'if'
-t_ELIF = r'elif'
 t_ELSE = r'else'
 t_WHILE = r'while'
-t_FOR = r'for'
 t_IN = r'in'
 t_LET = r'let'
 t_FUNCTION = r'function'

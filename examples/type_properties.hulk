@@ -14,6 +14,16 @@ let x: Array_A = [new A(), new A()] in
     print(x[0].str);
 }
 
+let x: B = new B(), i: Number = 0 in 
+{
+    while (i < 3)
+    {
+        x.arr[i].str := "Hello world";
+        print(x.arr[i].str);
+        i := i + 1;
+    }
+}
+
 type A
 {
     num: Number = 1000;
@@ -22,5 +32,5 @@ type A
 
 type B
 {
-    arr: Array_Number = [1,2,3,4,5,6,7,8,9];
+    arr: Array_A = [new A(), new A(), new A()];
 }
